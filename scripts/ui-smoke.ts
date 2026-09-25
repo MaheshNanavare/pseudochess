@@ -20,7 +20,7 @@ async function clickSquare(page: Page, square: string): Promise<void> {
 async function playAnyMove(page: Page): Promise<string> {
   const movable = page.locator('button[data-movable="true"]');
   await movable.first().click();
-  const target = page.locator('button[aria-label$="move here"]').first();
+  const target = page.locator('button[aria-label$=" here"]').first();
   const label = (await target.getAttribute('aria-label')) ?? '?';
   await target.click();
   const promo = page.getByRole('dialog', { name: 'Promote pawn to' });
@@ -60,7 +60,7 @@ try {
     const buttons = await page.getByRole('button').allInnerTexts();
     console.log(`[${viewport.name}] buttons:`, buttons.filter((t) => t.trim()).slice(0, 12));
 
-    await page.getByRole('button', { name: 'Got it' }).click();
+    await page.getByRole('button', { name: 'Start playing' }).click();
 
     await clickSquare(page, 'e2');
     await clickSquare(page, 'e4');
@@ -69,7 +69,7 @@ try {
 
     for (let i = 0; i < 6; i++) {
       const status = (await page.locator('[aria-live="polite"]').textContent()) ?? '';
-      if (!status.includes('Your move') && !status.includes('check')) break;
+      if (/thinking|You win|You lose|Draw/.test(status)) break;
       const played = await playAnyMove(page);
       console.log(`[${viewport.name}] played: ${played}`);
       await waitForPlayerTurn(page);

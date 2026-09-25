@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
-import type { Color } from './engine/types';
+import { opponentOf, type Color, type Difficulty } from './engine/types';
 import { Board } from './ui/components/Board';
-import { DifficultySelect } from './ui/components/DifficultySelect';
+import { Button } from './ui/components/Button';
 import { GameOverDialog } from './ui/components/GameOverDialog';
 import { HowToPlay } from './ui/components/HowToPlay';
 import { MoveHistory } from './ui/components/MoveHistory';
+import { NewGameDialog } from './ui/components/NewGameDialog';
+import { PlayerStrip } from './ui/components/PlayerStrip';
 import { PromotionPicker } from './ui/components/PromotionPicker';
+import { StatusLine } from './ui/components/StatusLine';
+import { Wordmark } from './ui/components/Wordmark';
 import { useGame } from './ui/hooks/useGame';
-import { COLOR_NAMES, describeResult } from './ui/text';
+import { describeResult } from './ui/text';
 
 const HELP_SEEN_KEY = 'pseudochess.helpSeen';
 
@@ -31,6 +35,7 @@ export default function App() {
   const game = useGame({ playerColor: 'w', difficulty: 'medium' });
   const { snapshot, settings } = game;
   const [helpOpen, setHelpOpen] = useState(() => !readHelpSeen());
+  const [newGameOpen, setNewGameOpen] = useState(false);
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
 
   const resultText = describeResult(snapshot.result, settings.playerColor);
@@ -40,91 +45,103 @@ export default function App() {
     if (resultText === null) setDismissedAt(null);
   }, [resultText]);
 
+  const player = settings.playerColor;
+  const ai = opponentOf(player);
+  const aiToMove = snapshot.result.status === 'ongoing' && snapshot.turn === ai;
+
   const closeHelp = () => {
     writeHelpSeen();
     setHelpOpen(false);
   };
 
-  const startGame = (playerColor: Color) => game.newGame({ playerColor });
-
-  let status: string;
-  if (resultText) status = `${resultText.title}. ${resultText.detail}`;
-  else if (game.thinking || !game.isPlayerTurn) status = 'AI is thinking…';
-  else if (snapshot.inCheck) status = 'You are in check.';
-  else status = 'Your move.';
+  const startGame = (playerColor: Color, difficulty: Difficulty) => {
+    setNewGameOpen(false);
+    game.newGame({ playerColor, difficulty });
+  };
 
   return (
-    <div className="min-h-dvh bg-stone-100 text-stone-900 dark:bg-stone-900 dark:text-stone-100">
-      <header className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-        <h1 className="text-2xl font-bold tracking-tight">PseudoChess</h1>
-        <button
-          type="button"
-          onClick={() => setHelpOpen(true)}
-          aria-label="How to play"
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-200 text-lg font-bold hover:bg-stone-300 dark:bg-stone-800 dark:hover:bg-stone-700"
-        >
-          ?
-        </button>
+    <div className="min-h-dvh">
+      <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 pt-4 pb-2 sm:px-6 lg:pt-6">
+        <Wordmark />
+        <nav aria-label="Game menu" className="flex items-center gap-1.5">
+          <Button aria-label="How to play" onClick={() => setHelpOpen(true)} className="w-11 rounded-full px-0 text-lg">
+            ?
+          </Button>
+          <Button variant="primary" onClick={() => setNewGameOpen(true)}>
+            New game
+          </Button>
+        </nav>
       </header>
 
-      <main className="mx-auto flex max-w-5xl flex-col gap-4 px-4 pb-8 lg:flex-row lg:items-start">
-        <div className="mx-auto w-full max-w-[560px] lg:mx-0">
+      <main className="mx-auto grid max-w-6xl gap-x-10 px-4 pb-8 sm:px-6 lg:grid-cols-[auto_minmax(16rem,21rem)] lg:justify-center">
+        <section aria-label="Game" className="mx-auto w-full max-w-[36rem] lg:w-[min(40rem,calc(100dvh-14rem))] lg:max-w-none">
+          <PlayerStrip
+            name="Computer"
+            detail={settings.difficulty[0]!.toUpperCase() + settings.difficulty.slice(1)}
+            color={ai}
+            pieces={snapshot.pieces.filter((p) => p.color === ai)}
+            toMove={aiToMove}
+            thinking={aiToMove}
+          />
           <Board
             pieces={snapshot.pieces}
-            orientation={settings.playerColor}
+            history={snapshot.history}
+            orientation={player}
             selected={game.selected}
             targets={game.targets}
             movable={game.movable}
             forced={snapshot.forced}
             lastMove={game.lastMove}
             checkSquare={snapshot.inCheck ? snapshot.kingSquare : undefined}
+            interactive={game.isPlayerTurn}
             onSquareClick={game.onSquareClick}
           />
-        </div>
+          <PlayerStrip
+            name="You"
+            color={player}
+            pieces={snapshot.pieces.filter((p) => p.color === player)}
+            toMove={game.isPlayerTurn}
+          />
+        </section>
 
-        <aside className="flex w-full flex-col gap-3 lg:max-w-sm">
-          <div aria-live="polite" className="rounded-lg bg-white p-3 shadow-sm dark:bg-stone-800">
-            <p className="font-medium">{status}</p>
-            {game.isPlayerTurn && snapshot.forced && (
-              <p className="mt-2 rounded-md bg-rose-100 px-2 py-1 text-sm font-semibold text-rose-800 dark:bg-rose-900/50 dark:text-rose-200">
-                Capture is forced
-              </p>
-            )}
+        <aside className="mx-auto w-full max-w-[36rem] lg:relative lg:max-w-none">
+          <div className="flex flex-col gap-5 pt-2 lg:absolute lg:inset-0 lg:pt-16 lg:pb-14">
+            <StatusLine result={resultText} isPlayerTurn={game.isPlayerTurn} forced={snapshot.forced} inCheck={snapshot.inCheck} />
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={game.undo} disabled={!game.canUndo}>
+                <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 4 3 8l4 4" />
+                  <path d="M3 8h9a5 5 0 0 1 0 10H9" />
+                </svg>
+                Undo move
+              </Button>
+              {resultText && (
+                <Button variant="primary" onClick={() => game.newGame()}>
+                  Play again
+                </Button>
+              )}
+            </div>
+            <div className="border-t border-line pt-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+              <MoveHistory moves={snapshot.history} />
+            </div>
           </div>
-
-          <DifficultySelect value={settings.difficulty} onChange={game.setDifficulty} />
-
-          <div className="grid grid-cols-2 gap-2">
-            {(['w', 'b'] as const).map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => startGame(c)}
-                className="rounded-lg bg-stone-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-stone-700 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-300"
-              >
-                New game as {COLOR_NAMES[c]}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={game.undo}
-            disabled={!game.canUndo}
-            className="rounded-lg bg-stone-200 px-3 py-2.5 text-sm font-semibold hover:bg-stone-300 disabled:opacity-40 dark:bg-stone-800 dark:hover:bg-stone-700"
-          >
-            Undo
-          </button>
-
-          <MoveHistory moves={snapshot.history} />
         </aside>
       </main>
 
-      <PromotionPicker open={game.pendingPromotion !== null} color={settings.playerColor} onChoose={game.choosePromotion} />
+      <PromotionPicker open={game.pendingPromotion !== null} color={player} onChoose={game.choosePromotion} />
+      <NewGameDialog
+        key={newGameOpen ? 'open' : 'closed'}
+        open={newGameOpen}
+        initialColor={player}
+        initialDifficulty={settings.difficulty}
+        onCancel={() => setNewGameOpen(false)}
+        onStart={startGame}
+      />
       <GameOverDialog
         result={resultText}
         open={gameOverOpen && !helpOpen}
         onClose={() => setDismissedAt(snapshot.history.length)}
-        onNewGame={() => startGame(settings.playerColor)}
+        onPlayAgain={() => game.newGame()}
       />
       <HowToPlay open={helpOpen} onClose={closeHelp} />
     </div>

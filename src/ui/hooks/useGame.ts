@@ -49,6 +49,10 @@ function takeSnapshot(board: Board): GameSnapshot {
 
 const toInput = ({ from, to, promotion }: Move): MoveInput => (promotion ? { from, to, promotion } : { from, to });
 
+/** The AI never answers faster than this, so the player's own move can finish sliding. */
+const MIN_THINK_MS = 450;
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 export function useGame(initial: GameSettings) {
   const boardRef = useRef<Board>(new Board());
   const [version, setVersion] = useState(0);
@@ -67,8 +71,8 @@ export function useGame(initial: GameSettings) {
   useEffect(() => {
     if (snapshot.result.status !== 'ongoing' || snapshot.turn === settings.playerColor) return;
     let active = true;
-    requestMove(START_FEN, snapshot.history.map(toInput), settings.difficulty)
-      .then((reply) => {
+    Promise.all([requestMove(START_FEN, snapshot.history.map(toInput), settings.difficulty), wait(MIN_THINK_MS)])
+      .then(([reply]) => {
         if (!active) return;
         boardRef.current.make(reply.move);
         bump();

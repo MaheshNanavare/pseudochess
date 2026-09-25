@@ -1,3 +1,4 @@
+import { Button } from './Button';
 import { Modal } from './Modal';
 
 interface HowToPlayProps {
@@ -7,37 +8,47 @@ interface HowToPlayProps {
 
 export function HowToPlay({ open, onClose }: HowToPlayProps) {
   return (
-    <Modal open={open} onClose={onClose} labelledBy="how-to-play-title">
-      <h2 id="how-to-play-title" className="text-2xl font-bold">How to play</h2>
-      <div className="mt-3 space-y-3 text-sm leading-relaxed text-stone-700 dark:text-stone-300">
-        <p>Normal chess board, pieces and moves. But the goal is turned upside down.</p>
-        <div>
-          <h3 className="font-semibold text-stone-900 dark:text-stone-100">You win if</h3>
-          <ul className="ml-5 list-disc">
+    <Modal open={open} onClose={onClose} labelledBy="how-to-play-title" wide>
+      <h2 id="how-to-play-title" className="text-3xl font-extrabold tracking-tight [font-stretch:80%]">
+        How to play
+      </h2>
+      <p className="mt-2 max-w-prose text-[17px] leading-relaxed">
+        Same board, same pieces, same moves as chess. The goal is turned upside down: get rid of your army.
+      </p>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <section className="rounded-lg border-l-4 border-jade bg-surface p-4">
+          <h3 className="font-bold">You win when</h3>
+          <ul className="mt-1.5 space-y-1 leading-snug">
             <li>your king gets checkmated, or</li>
-            <li>you lose every piece except your king.</li>
+            <li>you have lost every piece except your king.</li>
           </ul>
-        </div>
-        <div>
-          <h3 className="font-semibold text-stone-900 dark:text-stone-100">You lose if</h3>
-          <ul className="ml-5 list-disc">
+        </section>
+        <section className="rounded-lg border-l-4 border-rose bg-surface p-4">
+          <h3 className="font-bold">You lose when</h3>
+          <ul className="mt-1.5 space-y-1 leading-snug">
             <li>you checkmate the other king, or</li>
-            <li>the other side is left with only its king.</li>
+            <li>the other side has only its king left.</li>
           </ul>
-        </div>
-        <div>
-          <h3 className="font-semibold text-stone-900 dark:text-stone-100">Captures are forced</h3>
-          <p>If you can capture, you must. If there are several captures, you pick one.</p>
-        </div>
-        <div>
-          <h3 className="font-semibold text-stone-900 dark:text-stone-100">Check still counts</h3>
-          <p>When in check you must get out of check. If one way out is a capture, you must capture.</p>
-        </div>
-        <p>Pawns promote to a queen, rook, bishop or knight. Stalemate, threefold repetition and the 50-move rule are draws.</p>
+        </section>
       </div>
-      <button type="button" onClick={onClose} className="mt-6 w-full rounded-lg bg-stone-900 py-2 font-semibold text-white hover:bg-stone-700 dark:bg-stone-100 dark:text-stone-900">
-        Got it
-      </button>
+
+      <div className="mt-5 space-y-3 leading-relaxed">
+        <p>
+          <strong>If you can capture, you must.</strong> When several captures are possible, you choose which. Pieces that can
+          capture are outlined in gold.
+        </p>
+        <p>
+          <strong>Check works as usual.</strong> You must get out of check, and if one way out is a capture, you must take it.
+        </p>
+        <p className="text-muted">
+          Pawns promote to a queen, rook, bishop or knight. Stalemate, threefold repetition and the 50-move rule are draws.
+        </p>
+      </div>
+
+      <Button variant="primary" onClick={onClose} className="mt-6 w-full">
+        Start playing
+      </Button>
     </Modal>
   );
 }

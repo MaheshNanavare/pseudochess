@@ -1,6 +1,11 @@
 import type { Difficulty } from '../../engine/types';
+import { Segmented } from './Segmented';
 
-const LEVELS: Difficulty[] = ['easy', 'medium', 'hard'];
+export const DIFFICULTY_TEXT: Record<Difficulty, string> = {
+  easy: 'Looks a few moves ahead and sometimes picks a weaker move.',
+  medium: 'Looks four moves ahead and always plays its best move.',
+  hard: 'Searches deeper, as far as it can in about two seconds.',
+};
 
 interface DifficultySelectProps {
   value: Difficulty;
@@ -9,19 +14,19 @@ interface DifficultySelectProps {
 
 export function DifficultySelect({ value, onChange }: DifficultySelectProps) {
   return (
-    <fieldset className="flex rounded-lg bg-stone-200 p-1 dark:bg-stone-800">
-      <legend className="sr-only">Difficulty</legend>
-      {LEVELS.map((level) => (
-        <label
-          key={level}
-          className={`flex-1 cursor-pointer rounded-md px-3 py-1.5 text-center text-sm capitalize has-focus-visible:ring-2 has-focus-visible:ring-sky-400 ${
-            value === level ? 'bg-white font-semibold shadow dark:bg-stone-600' : 'text-stone-600 dark:text-stone-400'
-          }`}
-        >
-          <input type="radio" name="difficulty" value={level} checked={value === level} onChange={() => onChange(level)} className="sr-only" />
-          {level}
-        </label>
-      ))}
-    </fieldset>
+    <div>
+      <Segmented<Difficulty>
+        legend="Computer"
+        name="difficulty"
+        value={value}
+        onChange={onChange}
+        options={[
+          { value: 'easy', label: 'Easy' },
+          { value: 'medium', label: 'Medium' },
+          { value: 'hard', label: 'Hard' },
+        ]}
+      />
+      <p className="mt-2 min-h-10 text-sm text-muted">{DIFFICULTY_TEXT[value]}</p>
+    </div>
   );
 }
