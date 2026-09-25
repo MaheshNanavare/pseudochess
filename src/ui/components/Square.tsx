@@ -10,14 +10,17 @@ export interface SquareProps {
   isLastMove: boolean;
   inCheck: boolean;
   movable: boolean;
+  /** The one square in the board's tab order (roving tabindex). */
+  focusable: boolean;
   fileLabel: string | null;
   rankLabel: string | null;
   onClick: (square: SquareName) => void;
+  onFocus: (square: SquareName) => void;
 }
 
 /** The interactive, accessible layer of one square. Pieces are drawn above it by Board. */
 export function Square(props: SquareProps) {
-  const { name, piece, dark, selected, isTarget, isLastMove, inCheck, movable, fileLabel, rankLabel, onClick } = props;
+  const { name, piece, dark, selected, isTarget, isLastMove, inCheck, movable, focusable, fileLabel, rankLabel, onClick, onFocus } = props;
 
   let label = piece ? `${name}, ${COLOR_NAMES[piece.color]} ${PIECE_NAMES[piece.type]}` : `${name}, empty`;
   if (isTarget) label += piece ? ', capture here' : ', move here';
@@ -28,7 +31,10 @@ export function Square(props: SquareProps) {
       aria-label={label}
       aria-pressed={selected}
       data-movable={movable}
+      data-square={name}
+      tabIndex={focusable ? 0 : -1}
       onClick={() => onClick(name)}
+      onFocus={() => onFocus(name)}
       className={`relative ${dark ? 'bg-sq-dark' : 'bg-sq-light'} ${movable || isTarget ? 'cursor-pointer' : 'cursor-default'} outline-none focus-visible:z-10 focus-visible:ring-4 focus-visible:ring-ink focus-visible:ring-inset`}
     >
       {isLastMove && <span className={`absolute inset-0 ${dark ? 'bg-white/25' : 'bg-sq-dark/35'}`} />}

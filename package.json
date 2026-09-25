@@ -1,7 +1,7 @@
 {
   "name": "pseudochess",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "PseudoChess: reverse chess with forced captures. Lose your pieces to win.",
   "scripts": {
@@ -15,7 +15,8 @@
     "ui:smoke": "tsx scripts/ui-smoke.ts",
     "bench": "tsx scripts/bench.ts",
     "selfplay": "tsx scripts/selfplay.ts",
-    "tune": "tsx scripts/tune.ts"
+    "tune": "tsx scripts/tune.ts",
+    "screenshots": "tsx scripts/capture-screenshots.ts"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",

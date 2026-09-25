@@ -56,6 +56,36 @@
   }
 }
 
+/*
+ * Board themes. Palettes from the theme-factory skill (Ocean Depths, Forest
+ * Canopy, Desert Rose, Arctic Frost); Dusk is the default above. Selected
+ * with <html data-board="...">, so they override light and dark mode alike.
+ */
+:root[data-board='ocean'] {
+  --color-sq-light: #bfe3e4;
+  --color-sq-dark: #2d8b8b;
+  --color-coord-light: #2d8b8b;
+  --color-coord-dark: #f1faee;
+}
+:root[data-board='forest'] {
+  --color-sq-light: #e4e6d4;
+  --color-sq-dark: #7d8471;
+  --color-coord-light: #7d8471;
+  --color-coord-dark: #faf9f6;
+}
+:root[data-board='desert'] {
+  --color-sq-light: #e8d5c4;
+  --color-sq-dark: #b87d6d;
+  --color-coord-light: #b87d6d;
+  --color-coord-dark: #f7ece3;
+}
+:root[data-board='arctic'] {
+  --color-sq-light: #d4e4f7;
+  --color-sq-dark: #4a6fa5;
+  --color-coord-light: #4a6fa5;
+  --color-coord-dark: #eef4fb;
+}
+
 html {
   -webkit-tap-highlight-color: transparent;
   background: var(--color-page);

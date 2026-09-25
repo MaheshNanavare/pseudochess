@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { opponentOf, type Color, type Difficulty } from './engine/types';
 import { Board } from './ui/components/Board';
 import { Button } from './ui/components/Button';
@@ -8,10 +8,13 @@ import { MoveHistory } from './ui/components/MoveHistory';
 import { NewGameDialog } from './ui/components/NewGameDialog';
 import { PlayerStrip } from './ui/components/PlayerStrip';
 import { PromotionPicker } from './ui/components/PromotionPicker';
+import { SettingsDialog } from './ui/components/SettingsDialog';
 import { StatusLine } from './ui/components/StatusLine';
 import { Wordmark } from './ui/components/Wordmark';
 import { useGame } from './ui/hooks/useGame';
-import { describeResult } from './ui/text';
+import { playSound } from './ui/sound';
+import { loadGame, loadPreferences, savePreferences, type Preferences } from './ui/storage';
+import { describeMove, describeResult } from './ui/text';
 
 const HELP_SEEN_KEY = 'pseudochess.helpSeen';
 
@@ -32,10 +35,13 @@ function writeHelpSeen(): void {
 }
 
 export default function App() {
-  const game = useGame({ playerColor: 'w', difficulty: 'medium' });
+  const [saved] = useState(loadGame);
+  const game = useGame({ playerColor: saved?.playerColor ?? 'w', difficulty: saved?.difficulty ?? 'medium' }, saved?.moves);
   const { snapshot, settings } = game;
   const [helpOpen, setHelpOpen] = useState(() => !readHelpSeen());
   const [newGameOpen, setNewGameOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [prefs, setPrefs] = useState<Preferences>(loadPreferences);
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
 
   const resultText = describeResult(snapshot.result, settings.playerColor);
@@ -44,6 +50,25 @@ export default function App() {
   useEffect(() => {
     if (resultText === null) setDismissedAt(null);
   }, [resultText]);
+
+  useEffect(() => {
+    savePreferences(prefs);
+    if (prefs.boardTheme === 'dusk') delete document.documentElement.dataset.board;
+    else document.documentElement.dataset.board = prefs.boardTheme;
+  }, [prefs]);
+
+  // Sounds for new moves and for the end of the game (not for undo or loading a saved game).
+  const heardMoves = useRef(snapshot.history.length);
+  useEffect(() => {
+    const count = snapshot.history.length;
+    const grew = count > heardMoves.current;
+    heardMoves.current = count;
+    if (!grew || !prefs.sound) return;
+    const last = snapshot.history[count - 1]!;
+    if (resultText) playSound(resultText.outcome === 'win' ? 'win' : resultText.outcome === 'loss' ? 'loss' : 'draw');
+    else if (last.san.endsWith('+')) playSound('check');
+    else playSound(last.captured ? 'capture' : 'move');
+  }, [snapshot, resultText, prefs.sound]);
 
   const player = settings.playerColor;
   const ai = opponentOf(player);
@@ -61,11 +86,18 @@ export default function App() {
 
   return (
     <div className="min-h-dvh">
-      <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 pt-4 pb-2 sm:px-6 lg:pt-6">
+      <header className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 pt-4 pb-2 sm:px-6 lg:pt-6">
         <Wordmark />
         <nav aria-label="Game menu" className="flex items-center gap-1.5">
           <Button aria-label="How to play" onClick={() => setHelpOpen(true)} className="w-11 rounded-full px-0 text-lg">
             ?
+          </Button>
+          <Button aria-label="Settings" onClick={() => setSettingsOpen(true)} className="w-11 rounded-full px-0">
+            <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M3 6h9M16 6h1M3 14h1M8 14h9" />
+              <circle cx="14" cy="6" r="2" />
+              <circle cx="6" cy="14" r="2" />
+            </svg>
           </Button>
           <Button variant="primary" onClick={() => setNewGameOpen(true)}>
             New game
@@ -73,8 +105,8 @@ export default function App() {
         </nav>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-x-10 px-4 pb-8 sm:px-6 lg:grid-cols-[auto_minmax(16rem,21rem)] lg:justify-center">
-        <section aria-label="Game" className="mx-auto w-full max-w-[36rem] lg:w-[min(40rem,calc(100dvh-14rem))] lg:max-w-none">
+      <main className="mx-auto grid max-w-7xl gap-x-10 px-4 pb-8 sm:px-6 lg:grid-cols-[auto_minmax(16rem,21rem)] lg:justify-center">
+        <section aria-label="Game" className="mx-auto w-full max-w-[36rem] lg:w-[min(40rem,calc(100dvh-14rem))] lg:max-w-none xl:w-[min(54rem,calc(100dvh-14rem))]">
           <PlayerStrip
             name="Computer"
             detail={settings.difficulty[0]!.toUpperCase() + settings.difficulty.slice(1)}
@@ -91,10 +123,13 @@ export default function App() {
             targets={game.targets}
             movable={game.movable}
             forced={snapshot.forced}
+            hints={prefs.hints}
             lastMove={game.lastMove}
             checkSquare={snapshot.inCheck ? snapshot.kingSquare : undefined}
             interactive={game.isPlayerTurn}
             onSquareClick={game.onSquareClick}
+            onDragStart={game.select}
+            onDrop={game.tryMove}
           />
           <PlayerStrip
             name="You"
@@ -107,6 +142,9 @@ export default function App() {
         <aside className="mx-auto w-full max-w-[36rem] lg:relative lg:max-w-none">
           <div className="flex flex-col gap-5 pt-2 lg:absolute lg:inset-0 lg:pt-16 lg:pb-14">
             <StatusLine result={resultText} isPlayerTurn={game.isPlayerTurn} forced={snapshot.forced} inCheck={snapshot.inCheck} />
+            <p aria-live="polite" className="sr-only">
+              {game.lastMove ? describeMove(game.lastMove, player) : ''}
+            </p>
             <div className="flex flex-wrap gap-2">
               <Button onClick={game.undo} disabled={!game.canUndo}>
                 <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -144,6 +182,7 @@ export default function App() {
         onPlayAgain={() => game.newGame()}
       />
       <HowToPlay open={helpOpen} onClose={closeHelp} />
+      <SettingsDialog open={settingsOpen} prefs={prefs} onChange={setPrefs} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

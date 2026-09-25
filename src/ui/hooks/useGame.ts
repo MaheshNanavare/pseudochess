@@ -12,6 +12,7 @@ import {
   type PromotionPiece,
   type Square,
 } from '../../engine/types';
+import { saveGame } from '../storage';
 import { AICancelledError, useAI } from './useAI';
 
 export interface GameSettings {
@@ -53,8 +54,20 @@ const toInput = ({ from, to, promotion }: Move): MoveInput => (promotion ? { fro
 const MIN_THINK_MS = 450;
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export function useGame(initial: GameSettings) {
-  const boardRef = useRef<Board>(new Board());
+/** Replays saved moves; anything unexpected in storage just starts a fresh game. */
+function restoreBoard(moves: MoveInput[]): Board {
+  const board = new Board();
+  try {
+    for (const m of moves) board.make(m);
+    return board;
+  } catch {
+    return new Board();
+  }
+}
+
+export function useGame(initial: GameSettings, savedMoves: MoveInput[] = []) {
+  const [restored] = useState(() => restoreBoard(savedMoves));
+  const boardRef = useRef<Board>(restored);
   const [version, setVersion] = useState(0);
   const [settings, setSettings] = useState<GameSettings>(initial);
   const [selected, setSelected] = useState<Square | null>(null);
@@ -66,6 +79,11 @@ export function useGame(initial: GameSettings) {
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
   const isPlayerTurn = snapshot.result.status === 'ongoing' && snapshot.turn === settings.playerColor;
+
+  // Remember the game so closing the app does not lose it.
+  useEffect(() => {
+    saveGame({ ...settings, moves: snapshot.history.map(toInput) });
+  }, [snapshot, settings]);
 
   // AI reply whenever it is the AI's turn.
   useEffect(() => {
@@ -121,6 +139,31 @@ export function useGame(initial: GameSettings) {
     [isPlayerTurn, pendingPromotion, targets, selected, movable, play],
   );
 
+  /** Move by drag and drop. Returns false when the drop square is not a legal target. */
+  const tryMove = useCallback(
+    (from: Square, to: Square): boolean => {
+      if (!isPlayerTurn || pendingPromotion) return false;
+      const matches = snapshot.legal.filter((m) => m.from === from && m.to === to);
+      if (matches.length === 0) return false;
+      if (matches.length > 1) {
+        setSelected(from);
+        setPendingPromotion({ from, to });
+      } else {
+        play(toInput(matches[0]!));
+      }
+      return true;
+    },
+    [isPlayerTurn, pendingPromotion, snapshot, play],
+  );
+
+  /** Select a piece that can move (used when a drag starts). */
+  const select = useCallback(
+    (square: Square) => {
+      if (isPlayerTurn && !pendingPromotion && movable.has(square)) setSelected(square);
+    },
+    [isPlayerTurn, pendingPromotion, movable],
+  );
+
   const choosePromotion = useCallback(
     (piece: PromotionPiece | null) => {
       if (pendingPromotion && piece) play({ ...pendingPromotion, promotion: piece });
@@ -174,6 +217,8 @@ export function useGame(initial: GameSettings) {
     pendingPromotion,
     canUndo,
     onSquareClick,
+    tryMove,
+    select,
     choosePromotion,
     newGame,
     setDifficulty,

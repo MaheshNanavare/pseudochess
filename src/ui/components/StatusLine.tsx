@@ -42,7 +42,7 @@ export function StatusLine({ result, isPlayerTurn, forced, inCheck }: StatusLine
   }
 
   return (
-    <div aria-live="polite" className="min-h-12 text-[17px] leading-snug">
+    <div id="status" aria-live="polite" className="min-h-12 text-[17px] leading-snug">
       {body}
     </div>
   );

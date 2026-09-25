@@ -1,4 +1,4 @@
-import type { Color, GameResult, PieceType } from '../engine/types';
+import type { Color, GameResult, Move, PieceType } from '../engine/types';
 
 export const PIECE_NAMES: Record<PieceType, string> = {
   p: 'pawn',
@@ -10,6 +10,17 @@ export const PIECE_NAMES: Record<PieceType, string> = {
 };
 
 export const COLOR_NAMES: Record<Color, string> = { w: 'White', b: 'Black' };
+
+/** A move in plain words, for screen readers: "Computer: bishop a3 to g4, takes your pawn". */
+export function describeMove(m: Move, player: Color): string {
+  const mine = m.color === player;
+  let text = `${mine ? 'You' : 'Computer'}: ${PIECE_NAMES[m.piece]} ${m.from} to ${m.to}`;
+  if (m.captured) text += `, takes ${mine ? 'a' : 'your'} ${PIECE_NAMES[m.captured]}`;
+  if (m.promotion) text += `, promotes to ${PIECE_NAMES[m.promotion]}`;
+  if (m.san.endsWith('#')) text += ', checkmate';
+  else if (m.san.endsWith('+')) text += ', check';
+  return text;
+}
 
 export interface ResultText {
   outcome: 'win' | 'loss' | 'draw';

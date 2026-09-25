@@ -25,7 +25,7 @@ export function MoveHistory({ moves }: MoveHistoryProps) {
         Moves
       </h2>
       {rows.length === 0 ? (
-        <p className="text-sm text-muted">White moves first. Tap a piece, then a highlighted square.</p>
+        <p className="text-sm text-muted">White moves first. Drag a piece, or tap it and then a highlighted square.</p>
       ) : (
         <ol
           ref={listRef}

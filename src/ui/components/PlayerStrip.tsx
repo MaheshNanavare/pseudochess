@@ -43,7 +43,7 @@ export function PlayerStrip({ name, detail, color, pieces, toMove, thinking = fa
           <ul aria-label={`${name}: ${left ? summary : 'only the king'} left`} className={`mt-1 flex min-h-6 w-fit flex-wrap items-center gap-x-px rounded-md px-1 py-0.5 ${left ? 'bg-sq-light' : ''}`}>
             {burden.map((p, i) => (
               // Keyed by type and rank within the rack, so a piece moving on the board does not re-mount its icon.
-              <li key={`${p.type}${i - burden.findIndex((q) => q.type === p.type)}`} className="h-5 w-5 animate-pop">
+              <li key={`${p.type}${i - burden.findIndex((q) => q.type === p.type)}`} className="h-4 w-4 animate-pop sm:h-5 sm:w-5">
                 <img src={pieceSrc(color, p.type)} alt="" className="h-full w-full" />
               </li>
             ))}
