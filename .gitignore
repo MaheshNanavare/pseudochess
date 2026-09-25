@@ -1,0 +1,17 @@
+node_modules
+dist
+dev-dist
+coverage
+*.local
+.DS_Store
+Thumbs.db
+# signing keys and store packages must never be committed
+*.keystore
+*.jks
+*.pfx
+*.msix
+*.msixbundle
+*.appxbundle
+signing.keystore
+test-results
+playwright-report
