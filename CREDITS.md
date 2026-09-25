@@ -7,4 +7,5 @@ PseudoChess uses them under the **BSD licence**.
 Source: https://commons.wikimedia.org/wiki/Category:SVG_chess_pieces
 
 ## Libraries
-- chess.js (BSD-2-Clause), React (MIT), Vite (MIT), Tailwind CSS (MIT), Workbox via vite-plugin-pwa (MIT).
+- React (MIT), Vite (MIT), Tailwind CSS (MIT), Workbox via vite-plugin-pwa (MIT).
+- chess.js (BSD-2-Clause) is used only in tests, as a reference oracle for the move generator.

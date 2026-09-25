@@ -1,4 +1,4 @@
-import type { Board } from './board';
+import { GEN_CAPTURES, type Board } from './board';
 import type { Color, GameResult, Move } from './types';
 
 /**
@@ -6,26 +6,24 @@ import type { Color, GameResult, Move } from './types';
  * only captures may be played. Each promotion option is a separate move.
  */
 export function legalMoves(board: Board): Move[] {
-  return filterForcedCaptures(board.allLegalMoves());
-}
-
-export function filterForcedCaptures(moves: Move[]): Move[] {
-  const captures = moves.filter((m) => m.captured !== undefined);
-  return captures.length > 0 ? captures : moves;
+  const codes = board.forcedMoves();
+  // When captures are forced every rival move to the same square is also a
+  // capture, so the filtered list is enough for SAN disambiguation.
+  return codes.map((m) => board.toMove(m, codes));
 }
 
 export function hasForcedCapture(board: Board): boolean {
-  return board.allLegalMoves().some((m) => m.captured !== undefined);
+  return board.generateLegal(GEN_CAPTURES).length > 0;
 }
 
 export function onlyKingLeft(board: Board, color: Color): boolean {
-  return board.pieces(color).every((p) => p.type === 'k');
+  return board.nonKingCount(color) === 0;
 }
 
 /**
  * Reverse win conditions: a side that is checkmated WINS, and a side left
  * with only its king WINS. Stalemate, threefold repetition and the 50-move
- * rule are draws. chess.js game-over logic is deliberately not used.
+ * rule are draws.
  */
 export function getGameResult(board: Board): GameResult {
   const whiteBare = onlyKingLeft(board, 'w');
@@ -34,10 +32,9 @@ export function getGameResult(board: Board): GameResult {
   if (whiteBare) return { status: 'win', winner: 'w', reason: 'bare-king' };
   if (blackBare) return { status: 'win', winner: 'b', reason: 'bare-king' };
 
-  const side = board.sideToMove();
-  if (board.allLegalMoves().length === 0) {
+  if (board.forcedMoves().length === 0) {
     return board.inCheck()
-      ? { status: 'win', winner: side, reason: 'checkmated' }
+      ? { status: 'win', winner: board.sideToMove(), reason: 'checkmated' }
       : { status: 'draw', reason: 'stalemate' };
   }
   if (board.isThreefoldRepetition()) return { status: 'draw', reason: 'threefold-repetition' };

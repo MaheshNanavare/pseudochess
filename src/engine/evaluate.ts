@@ -1,6 +1,19 @@
-import type { Board } from './board';
-import { onlyKingLeft } from './rules';
-import { opponentOf, type Color, type Move, type Piece, type PieceType, type Square } from './types';
+import {
+  BISHOP_DIRS,
+  BLACK,
+  KING,
+  KING_OFFSETS,
+  KNIGHT,
+  KNIGHT_OFFSETS,
+  PAWN,
+  ROOK_DIRS,
+  BISHOP,
+  ROOK,
+  QUEEN,
+  WHITE,
+  type Board,
+} from './board';
+import { opponentOf, type Color, type PieceType } from './types';
 
 /** All tunable weights live here (spec section 3.1). */
 export interface EvalWeights {
@@ -35,25 +48,47 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
 /** Scores at or beyond this magnitude are decided games. */
 export const WIN_THRESHOLD = DEFAULT_WEIGHTS.win - 1000;
 
+/** Per-type weight tables indexed by piece type code (1..6). */
+interface Tables {
+  cost: Int32Array;
+  reach: Int32Array;
+}
+const tableCache = new WeakMap<EvalWeights, Tables>();
+const TYPE_ORDER: PieceType[] = ['p', 'n', 'b', 'r', 'q', 'k'];
+
+export function weightTables(w: EvalWeights): Tables {
+  let t = tableCache.get(w);
+  if (!t) {
+    const cost = new Int32Array(7);
+    const reach = new Int32Array(7);
+    TYPE_ORDER.forEach((type, i) => {
+      cost[i + 1] = w.remainingCost[type];
+      reach[i + 1] = w.captureReach[type];
+    });
+    t = { cost, reach };
+    tableCache.set(w, t);
+  }
+  return t;
+}
+
 /**
  * Terminal states from `me`'s point of view, or null if the game goes on.
- * `legal` may be passed in to avoid generating moves twice.
+ * `legalCount` (forced-capture legal move count) may be passed to avoid
+ * generating moves twice.
  */
 export function terminalScore(
   board: Board,
   me: Color,
   ply: number,
   weights: EvalWeights = DEFAULT_WEIGHTS,
-  legal?: Move[],
+  legalCount?: number,
 ): number | null {
-  const opp = opponentOf(me);
-  if (onlyKingLeft(board, me)) return weights.win - ply;
-  if (onlyKingLeft(board, opp)) return -weights.win + ply;
+  if (board.nonKingCount(me) === 0) return weights.win - ply;
+  if (board.nonKingCount(opponentOf(me)) === 0) return -weights.win + ply;
 
-  const side = board.sideToMove();
-  const moves = legal ?? board.allLegalMoves();
-  if (moves.length === 0) {
-    if (board.inCheck()) return side === me ? weights.win - ply : -weights.win + ply;
+  const count = legalCount ?? board.forcedMoves().length;
+  if (count === 0) {
+    if (board.inCheck()) return board.sideToMove() === me ? weights.win - ply : -weights.win + ply;
     return weights.draw;
   }
   if (board.isThreefoldRepetition()) return weights.draw;
@@ -61,83 +96,116 @@ export function terminalScore(
   return null;
 }
 
-interface AttackInfo {
-  /** Non-king pieces that the opponent attacks. */
-  exposed: Set<Square>;
-  /** For each attacking square, how many enemy non-king pieces it attacks. */
-  targets: Map<Square, number>;
-}
+// Scratch buffers reused by every call (evaluation runs many thousands of times per move).
+const targets = new Int32Array(128);
+const exposed = new Uint8Array(128);
 
-/** One pass over the board, reused by exposure and forced-capture terms. */
-function buildAttackInfo(board: Board, pieces: Piece[]): AttackInfo {
-  const exposed = new Set<Square>();
-  const targets = new Map<Square, number>();
-  for (const piece of pieces) {
-    if (piece.type === 'k') continue;
-    const attackers = board.attackers(piece.square, opponentOf(piece.color));
-    if (attackers.length === 0) continue;
-    exposed.add(piece.square);
-    for (const sq of attackers) targets.set(sq, (targets.get(sq) ?? 0) + 1);
+/**
+ * One pass over the board building the attack map used by the exposure and
+ * forced-capture terms: `exposed[sq]` = non-king piece on sq is attacked by
+ * the enemy, `targets[sq]` = number of enemy non-king pieces the piece on sq attacks.
+ */
+function buildAttackMap(s: Int8Array): void {
+  targets.fill(0);
+  exposed.fill(0);
+  for (let sq = 0; sq < 128; sq++) {
+    if (sq & 0x88) {
+      sq += 7;
+      continue;
+    }
+    const p = s[sq]!;
+    if (!p) continue;
+    const color = p & BLACK;
+    const type = p & 7;
+    let hits = 0;
+
+    if (type === PAWN) {
+      const fwd = color === WHITE ? 16 : -16;
+      for (let k = -1; k <= 1; k += 2) {
+        const t = sq + fwd + k;
+        if (t & 0x88) continue;
+        const q = s[t]!;
+        if (q && (q & BLACK) !== color && (q & 7) !== KING) {
+          hits++;
+          exposed[t] = 1;
+        }
+      }
+    } else if (type === KNIGHT || type === KING) {
+      const offsets = type === KNIGHT ? KNIGHT_OFFSETS : KING_OFFSETS;
+      for (const o of offsets) {
+        const t = sq + o;
+        if (t & 0x88) continue;
+        const q = s[t]!;
+        if (q && (q & BLACK) !== color && (q & 7) !== KING) {
+          hits++;
+          exposed[t] = 1;
+        }
+      }
+    } else {
+      const diag = type === BISHOP || type === QUEEN;
+      const straight = type === ROOK || type === QUEEN;
+      for (let i = 0; i < 8; i++) {
+        if ((i < 4 && !diag) || (i >= 4 && !straight)) continue;
+        const d = i < 4 ? BISHOP_DIRS[i]! : ROOK_DIRS[i - 4]!;
+        for (let t = sq + d; !(t & 0x88); t += d) {
+          const q = s[t]!;
+          if (!q) continue;
+          if ((q & BLACK) !== color && (q & 7) !== KING) {
+            hits++;
+            exposed[t] = 1;
+          }
+          break;
+        }
+      }
+    }
+    targets[sq] = hits;
   }
-  return { exposed, targets };
 }
 
-function rankOf(square: Square): number {
-  return Number(square[1]);
-}
+/** Static (non-terminal) score from `me`'s point of view (spec 3.4 to 3.7). */
+export function staticScore(board: Board, me: Color, w: EvalWeights = DEFAULT_WEIGHTS): number {
+  const { cost, reach } = weightTables(w);
+  const s = board.squares;
+  buildAttackMap(s);
+  const whiteLeft = board.nonKing[0]!;
+  const blackLeft = board.nonKing[1]!;
 
-function materialGood(pieces: Piece[], w: EvalWeights): number {
-  let total = 0;
-  for (const p of pieces) total -= w.remainingCost[p.type];
-  return total;
-}
+  let white = 0;
+  let black = 0;
+  for (let sq = 0; sq < 128; sq++) {
+    if (sq & 0x88) {
+      sq += 7;
+      continue;
+    }
+    const p = s[sq]!;
+    if (!p) continue;
+    const isWhite = (p & BLACK) === WHITE;
+    const type = p & 7;
 
-function pawnAdvanceGood(pieces: Piece[], side: Color, w: EvalWeights): number {
-  let total = 0;
-  for (const p of pieces) {
-    if (p.type !== 'p') continue;
-    const moved = side === 'w' ? rankOf(p.square) - 2 : 7 - rankOf(p.square);
-    total += Math.min(moved, w.pawnAdvanceCap) * w.pawnAdvance;
+    // Material: every piece still on the board costs its owner.
+    let good = -cost[type]!;
+
+    // Pawn progress, capped so the engine does not race to promote.
+    if (type === PAWN) {
+      const moved = isWhite ? (sq >> 4) - 1 : 6 - (sq >> 4);
+      good += Math.min(moved, w.pawnAdvanceCap) * w.pawnAdvance;
+    }
+
+    // Exposure: being capturable is good.
+    if (type !== KING && exposed[sq]) good += w.exposed * cost[type]!;
+
+    // Forced-capture risk: being able to capture is bad, worse near a bare-king opponent.
+    const hits = targets[sq]!;
+    if (hits) {
+      let risk = hits * reach[type]! * w.forcedCapture;
+      if ((isWhite ? blackLeft : whiteLeft) <= w.endgameThreshold) risk += hits * w.endgameDanger;
+      good -= risk;
+    }
+
+    if (isWhite) white += good;
+    else black += good;
   }
-  return total;
-}
-
-function exposureGood(pieces: Piece[], info: AttackInfo, w: EvalWeights): number {
-  let total = 0;
-  for (const p of pieces) {
-    if (p.type !== 'k' && info.exposed.has(p.square)) total += w.exposed * w.remainingCost[p.type];
-  }
-  return total;
-}
-
-function forcedCaptureGood(pieces: Piece[], oppLeft: number, info: AttackInfo, w: EvalWeights): number {
-  let total = 0;
-  for (const p of pieces) {
-    const targets = info.targets.get(p.square) ?? 0;
-    if (targets === 0) continue;
-    let risk = targets * w.captureReach[p.type] * w.forcedCapture;
-    if (oppLeft <= w.endgameThreshold) risk += targets * w.endgameDanger;
-    total -= risk;
-  }
-  return total;
-}
-
-/** Static (non-terminal) score from `me`'s point of view. */
-export function staticScore(board: Board, me: Color, weights: EvalWeights = DEFAULT_WEIGHTS): number {
-  const opp = opponentOf(me);
-  const all = board.pieces();
-  const mine = all.filter((p) => p.color === me);
-  const theirs = all.filter((p) => p.color === opp);
-  const info = buildAttackInfo(board, all);
-  const myLeft = mine.length - 1;
-  const oppLeft = theirs.length - 1;
-
-  return (
-    materialGood(mine, weights) - materialGood(theirs, weights) +
-    pawnAdvanceGood(mine, me, weights) - pawnAdvanceGood(theirs, opp, weights) +
-    exposureGood(mine, info, weights) - exposureGood(theirs, info, weights) +
-    forcedCaptureGood(mine, oppLeft, info, weights) - forcedCaptureGood(theirs, myLeft, info, weights)
-  );
+  return me === 'w' ? white - black : black - white;
 }
 
 /** Full evaluation (spec section 3.2): terminal states override everything. */
@@ -146,9 +214,9 @@ export function evaluate(
   me: Color,
   ply: number,
   weights: EvalWeights = DEFAULT_WEIGHTS,
-  legal?: Move[],
+  legalCount?: number,
 ): number {
-  const t = terminalScore(board, me, ply, weights, legal);
+  const t = terminalScore(board, me, ply, weights, legalCount);
   if (t !== null) return t;
   return staticScore(board, me, weights);
 }
