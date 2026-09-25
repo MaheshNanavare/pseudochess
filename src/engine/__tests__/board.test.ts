@@ -92,6 +92,14 @@ describe('Board agrees with chess.js (differential)', () => {
     }
   });
 
+  it('counts repetitions of the current position', () => {
+    const board = new Board();
+    expect(board.repetitions(2)).toBe(false);
+    for (const [from, to] of [['g1', 'f3'], ['g8', 'f6'], ['f3', 'g1'], ['f6', 'g8']] as const) board.make({ from, to });
+    expect(board.repetitions(2)).toBe(true);
+    expect(board.repetitions(3)).toBe(false);
+  });
+
   it('undo restores the exact position and hash', () => {
     const board = new Board('r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1');
     const fen = board.fen();

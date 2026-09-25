@@ -26,7 +26,13 @@ export interface EvalWeights {
   pawnAdvance: number;
   pawnAdvanceCap: number;
   exposed: number;
+  /** Exposure bonus when the exposed piece is also defended (a capture leads to a forced recapture). */
+  exposedDefended: number;
   forcedCapture: number;
+  /** Forced-capture risk per attacked enemy piece that is defended (my capturer gets recaptured). */
+  forcedCaptureDefended: number;
+  /** Penalty per own pawn blocked by the piece directly in front of it. */
+  blockedPawn: number;
   endgameDanger: number;
   /** Endgame danger applies when the opponent has this many non-king pieces or fewer. */
   endgameThreshold: number;
@@ -40,7 +46,10 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   pawnAdvance: 1,
   pawnAdvanceCap: 4,
   exposed: 2,
+  exposedDefended: 2,
   forcedCapture: 1,
+  forcedCaptureDefended: 1,
+  blockedPawn: 0,
   endgameDanger: 20,
   endgameThreshold: 2,
 };
@@ -97,17 +106,40 @@ export function terminalScore(
 }
 
 // Scratch buffers reused by every call (evaluation runs many thousands of times per move).
-const targets = new Int32Array(128);
 const exposed = new Uint8Array(128);
+const defended = new Uint8Array(128);
+const targetsFree = new Int32Array(128);
+const targetsDefended = new Int32Array(128);
+const pairFrom = new Int16Array(1024);
+const pairTo = new Int16Array(1024);
 
 /**
  * One pass over the board building the attack map used by the exposure and
- * forced-capture terms: `exposed[sq]` = non-king piece on sq is attacked by
- * the enemy, `targets[sq]` = number of enemy non-king pieces the piece on sq attacks.
+ * forced-capture terms: `exposed[sq]` = the non-king piece on sq is attacked
+ * by the enemy, `defended[sq]` = it is protected by its own side, and
+ * `targetsFree/targetsDefended[sq]` = how many undefended/defended enemy
+ * non-king pieces the piece on sq attacks.
  */
 function buildAttackMap(s: Int8Array): void {
-  targets.fill(0);
   exposed.fill(0);
+  defended.fill(0);
+  targetsFree.fill(0);
+  targetsDefended.fill(0);
+  let pairs = 0;
+
+  const touch = (from: number, t: number, color: number): void => {
+    const q = s[t]!;
+    if (!q || (q & 7) === KING) return;
+    if ((q & BLACK) === color) {
+      defended[t] = 1;
+    } else {
+      exposed[t] = 1;
+      pairFrom[pairs] = from;
+      pairTo[pairs] = t;
+      pairs++;
+    }
+  };
+
   for (let sq = 0; sq < 128; sq++) {
     if (sq & 0x88) {
       sq += 7;
@@ -117,29 +149,15 @@ function buildAttackMap(s: Int8Array): void {
     if (!p) continue;
     const color = p & BLACK;
     const type = p & 7;
-    let hits = 0;
 
     if (type === PAWN) {
       const fwd = color === WHITE ? 16 : -16;
-      for (let k = -1; k <= 1; k += 2) {
-        const t = sq + fwd + k;
-        if (t & 0x88) continue;
-        const q = s[t]!;
-        if (q && (q & BLACK) !== color && (q & 7) !== KING) {
-          hits++;
-          exposed[t] = 1;
-        }
-      }
+      if (!((sq + fwd - 1) & 0x88)) touch(sq, sq + fwd - 1, color);
+      if (!((sq + fwd + 1) & 0x88)) touch(sq, sq + fwd + 1, color);
     } else if (type === KNIGHT || type === KING) {
       const offsets = type === KNIGHT ? KNIGHT_OFFSETS : KING_OFFSETS;
       for (const o of offsets) {
-        const t = sq + o;
-        if (t & 0x88) continue;
-        const q = s[t]!;
-        if (q && (q & BLACK) !== color && (q & 7) !== KING) {
-          hits++;
-          exposed[t] = 1;
-        }
+        if (!((sq + o) & 0x88)) touch(sq, sq + o, color);
       }
     } else {
       const diag = type === BISHOP || type === QUEEN;
@@ -148,17 +166,17 @@ function buildAttackMap(s: Int8Array): void {
         if ((i < 4 && !diag) || (i >= 4 && !straight)) continue;
         const d = i < 4 ? BISHOP_DIRS[i]! : ROOK_DIRS[i - 4]!;
         for (let t = sq + d; !(t & 0x88); t += d) {
-          const q = s[t]!;
-          if (!q) continue;
-          if ((q & BLACK) !== color && (q & 7) !== KING) {
-            hits++;
-            exposed[t] = 1;
-          }
+          if (!s[t]) continue;
+          touch(sq, t, color);
           break;
         }
       }
     }
-    targets[sq] = hits;
+  }
+
+  for (let i = 0; i < pairs; i++) {
+    if (defended[pairTo[i]!]) targetsDefended[pairFrom[i]!]!++;
+    else targetsFree[pairFrom[i]!]!++;
   }
 }
 
@@ -191,16 +209,20 @@ export function staticScore(board: Board, me: Color, w: EvalWeights = DEFAULT_WE
       good += Math.min(moved, w.pawnAdvanceCap) * w.pawnAdvance;
     }
 
-    // Exposure: being capturable is good.
-    if (type !== KING && exposed[sq]) good += w.exposed * cost[type]!;
+    // Exposure: being capturable is good (less so if a capture forces my recapture).
+    if (type !== KING && exposed[sq]) good += (defended[sq] ? w.exposedDefended : w.exposed) * cost[type]!;
 
     // Forced-capture risk: being able to capture is bad, worse near a bare-king opponent.
-    const hits = targets[sq]!;
-    if (hits) {
-      let risk = hits * reach[type]! * w.forcedCapture;
-      if ((isWhite ? blackLeft : whiteLeft) <= w.endgameThreshold) risk += hits * w.endgameDanger;
+    const free = targetsFree[sq]!;
+    const guarded = targetsDefended[sq]!;
+    if (free || guarded) {
+      let risk = reach[type]! * (free * w.forcedCapture + guarded * w.forcedCaptureDefended);
+      if ((isWhite ? blackLeft : whiteLeft) <= w.endgameThreshold) risk += (free + guarded) * w.endgameDanger;
       good -= risk;
     }
+
+    // Blocked pawns cannot walk into danger, so they are the hardest pieces to shed.
+    if (type === PAWN && w.blockedPawn && s[sq + (isWhite ? 16 : -16)]) good -= w.blockedPawn;
 
     if (isWhite) white += good;
     else black += good;

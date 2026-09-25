@@ -61,7 +61,7 @@ Each promotion option (Q, R, B, N) is a separate move in the list.
 |--------|--------------|-------|
 | Easy   | 3            | Pick randomly from the top 2 to 3 moves |
 | Medium | 4            | Best move |
-| Hard   | 5            | Best move |
+| Hard   | 5 minimum, then deeper (up to 10) within ~1.5 s | Best move. Self-play: depth 6 beats depth 4 by +175 Elo |
 
 ---
 
@@ -329,6 +329,11 @@ pseudochess/
 
 - **Speed:** build one attack map per side at the start of `evaluate` and reuse it in 3.6 and 3.7. This function runs thousands of times per move.
 - **Tuning:** weights are starting guesses. Tune by self-play: a depth-4 bot with weights A plays 50 games against weights B, keep the winner.
+- **Tuning results** (`npm run tune`, 200 games per variant, paired openings, depth 4):
+  - No single-weight change beat the section 3 weights significantly (all within about ±40 Elo), including pawn cost 10, exposure 1 or 3, forced-capture 2 or 3, endgame danger 10 or 40, flat or larger capture reach, and qMax 4 or 16. The spec weights stay.
+  - Pawn advance 0 or 2 both scored -42 Elo against 1, so the spec value is right.
+  - Extra terms tried and rejected: halving the exposure bonus for defended pieces, ignoring defended targets, a blocked-pawn penalty (+26 on one seed, -10 ± 28 over 400 games on another), two-fold repetition in search. They remain in the code as weights that default to spec behaviour.
+  - Search depth dominates: depth 5 vs 4 +87 ± 44 Elo, depth 6 vs 4 +175 ± 44 Elo. Hence the deeper hard level in section 2.
 - **Promotion:** generate all four options (Q, R, B, N) as separate moves and let the search pick. Under this scoring the AI will often prefer a Knight or Bishop, since they have lower capture reach than a Queen.
 - **Repetition detection:** chess.js tracks position history, so use its threefold repetition check. It stays correct during search as long as every `make` is paired with an `undo`.
 - **50-move rule:** use the halfmove clock from chess.js (reset on any capture or pawn move). It will rarely trigger here because captures are forced and frequent.

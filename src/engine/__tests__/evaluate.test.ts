@@ -59,6 +59,32 @@ describe('evaluate', () => {
     expect(evaluate(board, 'b', 3)).toBe(WIN - 3);
   });
 
+  it('can value a defended exposed piece less than an undefended one', () => {
+    // Black knight c6 attacks the d4 pawn; in the second position the c3 pawn defends it.
+    const weights = { ...DEFAULT_WEIGHTS, exposedDefended: 0 };
+    const undefended = evaluate(new Board('k7/8/2n5/8/3P4/8/8/4K3 w - - 0 1'), 'w', 0, weights);
+    const undefendedNoPawn = evaluate(new Board('k7/8/7n/8/3P4/8/8/4K3 w - - 0 1'), 'w', 0, weights);
+    const defended = evaluate(new Board('k7/8/2n5/8/3P4/2P5/8/4K3 w - - 0 1'), 'w', 0, weights);
+    const defendedSafe = evaluate(new Board('k7/8/7n/8/3P4/2P5/8/4K3 w - - 0 1'), 'w', 0, weights);
+    expect(undefended - undefendedNoPawn).toBeGreaterThan(defended - defendedSafe);
+    // With the spec defaults, defence makes no difference to the exposure bonus.
+    const specDefended = evalFen('k7/8/2n5/8/3P4/2P5/8/4K3 w - - 0 1', 'w') - evalFen('k7/8/7n/8/3P4/2P5/8/4K3 w - - 0 1', 'w');
+    const specUndefended = evalFen('k7/8/2n5/8/3P4/8/8/4K3 w - - 0 1', 'w') - evalFen('k7/8/7n/8/3P4/8/8/4K3 w - - 0 1', 'w');
+    expect(specDefended).toBe(specUndefended);
+  });
+
+  it('penalises blocked pawns when blockedPawn is set', () => {
+    const weights = { ...DEFAULT_WEIGHTS, blockedPawn: 5 };
+    // A black knight on d4 blocks white's d3 pawn; on a4 it blocks nothing and attacks nothing.
+    const blocked = evaluate(new Board('k7/8/8/8/3n4/3P4/8/4K3 w - - 0 1'), 'w', 0, weights);
+    const free = evaluate(new Board('k7/8/8/8/n7/3P4/8/4K3 w - - 0 1'), 'w', 0, weights);
+    expect(free - blocked).toBe(5);
+    // Mutually blocked pawns penalise both sides equally.
+    const mutual = evaluate(new Board('k7/8/8/8/3p4/3P4/8/4K3 w - - 0 1'), 'w', 0, weights);
+    const neither = evaluate(new Board('k7/8/8/8/p7/3P4/8/4K3 w - - 0 1'), 'w', 0, weights);
+    expect(mutual).toBe(neither);
+  });
+
   it('scores draws as zero', () => {
     expect(evalFen('8/8/8/8/8/7p/5k1P/7K w - - 0 1', 'w')).toBe(0);
   });

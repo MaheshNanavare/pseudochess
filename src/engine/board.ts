@@ -565,13 +565,18 @@ export class Board {
 
   /** Threefold repetition over the positions since load (same side to move, since last irreversible move). */
   isThreefoldRepetition(): boolean {
+    return this.repetitions(3);
+  }
+
+  /** Has the current position occurred at least `times` times (counting now)? */
+  repetitions(times: number): boolean {
     const n = this.histLo.length - 1;
     const lo = this.hashLo;
     const hi = this.hashHi;
     const stop = Math.max(0, n - this.halfmove);
     let count = 1;
     for (let i = n - 2; i >= stop; i -= 2) {
-      if (this.histLo[i] === lo && this.histHi[i] === hi && ++count >= 3) return true;
+      if (this.histLo[i] === lo && this.histHi[i] === hi && ++count >= times) return true;
     }
     return false;
   }

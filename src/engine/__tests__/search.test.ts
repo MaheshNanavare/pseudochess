@@ -69,15 +69,43 @@ describe('findBestMove', () => {
     }
   });
 
-  it('easy mode picks among the top moves and stays legal', () => {
+  it('hard always completes at least the spec depth 5, then deepens within its time budget', () => {
+    const board = new Board('r2q1rk1/pp2bppp/2n1bn2/3p4/3P4/2NBBN2/PP3PPP/R2Q1RK1 w - - 0 10');
+    const result = findBestMove(board, 'hard');
+    expect(result.depth).toBeGreaterThanOrEqual(5);
+    expect(result.timeMs).toBeLessThan(4000);
+  });
+
+  it('breaks ties between equal moves differently with different random streams', () => {
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 8; seed++) {
+      seen.add(uci(findBestMove(new Board(), { depth: 2, random: mulberry32(seed) }).move));
+    }
+    expect(seen.size).toBeGreaterThan(1);
+  });
+
+  it('easy mode varies its moves, stays legal and never picks a lost move when a better one exists', () => {
     const board = new Board();
+    const legal = legalMoves(board).map(uci);
     const seen = new Set<string>();
     const random = mulberry32(3);
     for (let i = 0; i < 6; i++) {
-      const result = findBestMove(board, { depth: 1, topN: 3, timeLimitMs: 5_000, random });
+      const result = findBestMove(board, { depth: 2, topN: 3, timeLimitMs: 5_000, random });
+      expect(legal).toContain(uci(result.move));
+      expect(result.score).toBeGreaterThan(-DEFAULT_WEIGHTS.win + 1000);
       seen.add(uci(result.move));
     }
     expect(seen.size).toBeGreaterThan(1);
-    expect(seen.size).toBeLessThanOrEqual(3);
+  });
+
+  it('easy mode never picks a move it sees as lost', () => {
+    // Rd4 wins at once (exd4 is forced), while rook moves that attack e5, such as
+    // Re1, lose: black waits and white must take its last pawn. Easy may choose
+    // any of its top 3 moves, but never a lost one.
+    const board = new Board('k7/8/8/4p3/8/8/8/K2R4 w - - 0 1');
+    for (let seed = 1; seed <= 5; seed++) {
+      const result = findBestMove(board, { depth: 3, topN: 3, timeLimitMs: 5_000, random: mulberry32(seed) });
+      expect(result.score).toBeGreaterThan(-DEFAULT_WEIGHTS.win + 1000);
+    }
   });
 });

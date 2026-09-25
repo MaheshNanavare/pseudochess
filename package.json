@@ -14,7 +14,8 @@
     "icons": "tsx scripts/generate-icons.ts",
     "ui:smoke": "tsx scripts/ui-smoke.ts",
     "bench": "tsx scripts/bench.ts",
-    "selfplay": "tsx scripts/selfplay.ts"
+    "selfplay": "tsx scripts/selfplay.ts",
+    "tune": "tsx scripts/tune.ts"
   },
   "dependencies": {
     "react": "^19.3.0",

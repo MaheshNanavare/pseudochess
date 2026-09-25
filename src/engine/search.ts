@@ -5,7 +5,9 @@ import type { Color, Difficulty, Move } from './types';
 export interface SearchOptions {
   /** Maximum iterative-deepening depth. */
   depth: number;
-  /** Soft time limit per move. Depth 1 always completes so a move is always ready. */
+  /** Depths up to this one always complete, whatever the time limit. */
+  minDepth: number;
+  /** Soft time limit per move, applied to depths beyond minDepth. */
   timeLimitMs: number;
   /** 1 = play the best move; N > 1 = pick randomly among the top N. */
   topN: number;
@@ -13,6 +15,8 @@ export interface SearchOptions {
   random: () => number;
   /** Safety cap on capture-chain length in quiescence. */
   qMax: number;
+  /** Score a position that already occurred once as a draw inside the search (sees repetitions earlier). */
+  twofoldDraw: boolean;
 }
 
 export interface SearchResult {
@@ -23,19 +27,27 @@ export interface SearchResult {
   timeMs: number;
 }
 
-export const DIFFICULTY_SETTINGS: Record<Difficulty, Pick<SearchOptions, 'depth' | 'topN'>> = {
-  easy: { depth: 3, topN: 3 },
-  medium: { depth: 4, topN: 1 },
-  hard: { depth: 5, topN: 1 },
+/**
+ * Easy and medium follow spec section 2. Self-play showed depth dominates
+ * strength here (depth 5 vs 4: +87 Elo, depth 6 vs 4: +175 Elo over 200
+ * games each), so hard guarantees the spec's depth 5 and then keeps
+ * deepening while its time budget allows.
+ */
+export const DIFFICULTY_SETTINGS: Record<Difficulty, Pick<SearchOptions, 'depth' | 'minDepth' | 'topN' | 'timeLimitMs'>> = {
+  easy: { depth: 3, minDepth: 1, topN: 3, timeLimitMs: 2000 },
+  medium: { depth: 4, minDepth: 1, topN: 1, timeLimitMs: 2000 },
+  hard: { depth: 10, minDepth: 5, topN: 1, timeLimitMs: 1500 },
 };
 
 export const DEFAULT_OPTIONS: SearchOptions = {
   depth: 4,
+  minDepth: 1,
   timeLimitMs: 2000,
   topN: 1,
   weights: DEFAULT_WEIGHTS,
   random: Math.random,
   qMax: 8,
+  twofoldDraw: false,
 };
 
 const INF = 1_000_000;
@@ -116,7 +128,7 @@ class Searcher {
     this.winThreshold = opts.weights.win - 1000;
   }
 
-  /** Enable the time check (off during depth 1, so depth 1 always completes). */
+  /** Enable the time check (off up to minDepth, so those depths always complete). */
   setTimed(timed: boolean): void {
     this.timed = timed;
   }
@@ -198,7 +210,7 @@ class Searcher {
     // Terminal states (spec 3.3), from the side to move's point of view.
     if (b.nonKing[b.stm >> 3] === 0) return w.win - ply;
     if (b.nonKing[(b.stm ^ BLACK) >> 3] === 0) return -w.win + ply;
-    if (b.isThreefoldRepetition()) return w.draw;
+    if (b.repetitions(this.opts.twofoldDraw ? 2 : 3)) return w.draw;
     const moves = b.forcedMoves();
     if (moves.length === 0) return b.isInCheck() ? w.win - ply : w.draw;
     if (b.halfmove >= 100) return w.draw;
@@ -327,6 +339,14 @@ class Searcher {
   }
 }
 
+function shuffle<T>(items: T[], random: () => number): T[] {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [items[i], items[j]] = [items[j]!, items[i]!];
+  }
+  return items;
+}
+
 function colorOf(stm: number): Color {
   return stm === BLACK ? 'b' : 'w';
 }
@@ -358,7 +378,9 @@ export function findBestMove(board: Board, difficulty: Difficulty | Partial<Sear
   const legal = board.forcedMoves();
   if (legal.length === 0) throw new Error('findBestMove called with no legal moves');
 
-  let ordered = [...legal];
+  // Shuffle first: the stable sort below then breaks ties between equally
+  // ordered moves at random, so equal-scoring moves vary from game to game.
+  let ordered = shuffle([...legal], opts.random);
   const initial = searcher.scoreMoves(ordered, 0, 0);
   ordered = ordered.map((m, i) => ({ m, s: initial[i]! })).sort((a, c) => c.s - a.s).map((x) => x.m);
   let ranked: RootScore[] = [{ move: ordered[0]!, score: 0 }];
@@ -366,7 +388,7 @@ export function findBestMove(board: Board, difficulty: Difficulty | Partial<Sear
 
   if (legal.length > 1) {
     for (let depth = 1; depth <= opts.depth; depth++) {
-      searcher.setTimed(depth > 1);
+      searcher.setTimed(depth > Math.max(1, opts.minDepth));
       const result = opts.topN > 1 ? searcher.searchRootAll(ordered, depth) : searcher.searchRootBest(ordered, depth);
       if (searcher.stopped || result.length === 0) break;
       ranked = result;
