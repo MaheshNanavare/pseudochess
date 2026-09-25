@@ -14,6 +14,7 @@ const url = process.argv[2] ?? 'http://localhost:4173';
 async function playOpening(page: Page): Promise<void> {
   await page.goto(url);
   await page.waitForLoadState('networkidle');
+  await page.getByRole('button', { name: 'Start new game' }).click();
   await page.getByRole('button', { name: 'Start playing' }).click();
   for (let i = 0; i < 5; i++) {
     await page.locator('#status').filter({ hasNotText: 'thinking' }).waitFor({ timeout: 30_000 });
@@ -39,7 +40,8 @@ mkdirSync('public/screenshots', { recursive: true });
 mkdirSync('store-assets/screenshots', { recursive: true });
 
 const browser = await chromium.launch();
-const shots: { file: string; width: number; height: number; scale: number; scheme: 'light' | 'dark' }[] = [
+const shots: { file: string; width: number; height: number; scale: number; scheme: 'light' | 'dark'; home?: boolean }[] = [
+  { file: 'store-assets/screenshots/home-dark-1920x1080.png', width: 1920, height: 1080, scale: 1, scheme: 'dark', home: true },
   { file: 'public/screenshots/wide.png', width: 1366, height: 768, scale: 1, scheme: 'light' },
   { file: 'public/screenshots/narrow.png', width: 390, height: 844, scale: 2, scheme: 'light' },
   { file: 'store-assets/screenshots/desktop-light-1920x1080.png', width: 1920, height: 1080, scale: 1, scheme: 'light' },
@@ -53,7 +55,14 @@ try {
       colorScheme: s.scheme,
     });
     const page = await context.newPage();
-    await playOpening(page);
+    if (s.home) {
+      // The home page once its landing animation has finished.
+      await page.goto(url);
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(4500);
+    } else {
+      await playOpening(page);
+    }
     await page.screenshot({ path: s.file });
     console.log(`wrote ${s.file}`);
     await context.close();

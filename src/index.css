@@ -27,6 +27,13 @@
 
   --animate-pop: pop 260ms cubic-bezier(0.2, 0.9, 0.3, 1.3);
   --animate-think: think 1.2s ease-in-out infinite;
+  /* Landing sequence (home page); per-element delays are set inline. */
+  --animate-flip: flip 760ms cubic-bezier(0.5, 1.45, 0.45, 1) 650ms both;
+  --animate-settle: settle 420ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  --animate-release: release 1100ms cubic-bezier(0.55, 0, 0.8, 0.4) both;
+  --animate-win-mark: pop 320ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+  --animate-caption: caption 500ms ease-out both;
+  --animate-enter: enter 240ms ease-out;
 
   @keyframes pop {
     from {
@@ -37,6 +44,48 @@
   @keyframes think {
     50% {
       opacity: 0.25;
+    }
+  }
+  /*
+   * The word "Chess" starts upright and turns over into its resting, inverted
+   * pose. Tipping over in 3D (rotateX and rotateY together equal a flat 180deg
+   * turn) keeps the word inside its own line instead of sweeping across the page.
+   * The end frame is the static mark's pose (0.2em down, turned 180deg), written
+   * as one transform: the CSS minifier drops rotate/translate inside keyframes.
+   */
+  @keyframes flip {
+    from {
+      transform: translateY(0) perspective(40em) rotateX(0deg) rotateY(0deg);
+    }
+    to {
+      transform: translateY(0.2em) perspective(40em) rotateX(180deg) rotateY(180deg);
+    }
+  }
+  @keyframes settle {
+    from {
+      transform: translateY(-35%);
+      opacity: 0;
+    }
+  }
+  /* Weight rises: pieces accelerate upwards and fade, like the tiles in the Store art. */
+  @keyframes release {
+    35% {
+      opacity: 1;
+    }
+    to {
+      transform: translateY(-340%);
+      opacity: 0;
+    }
+  }
+  @keyframes caption {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+  @keyframes enter {
+    from {
+      opacity: 0;
     }
   }
 }
@@ -112,5 +161,6 @@ body {
   *::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
   }
 }

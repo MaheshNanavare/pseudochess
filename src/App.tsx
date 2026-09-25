@@ -3,6 +3,7 @@ import { opponentOf, type Color, type Difficulty } from './engine/types';
 import { Board } from './ui/components/Board';
 import { Button } from './ui/components/Button';
 import { GameOverDialog } from './ui/components/GameOverDialog';
+import { Home, type GameInProgress } from './ui/components/Home';
 import { HowToPlay } from './ui/components/HowToPlay';
 import { MoveHistory } from './ui/components/MoveHistory';
 import { NewGameDialog } from './ui/components/NewGameDialog';
@@ -17,6 +18,10 @@ import { loadGame, loadPreferences, savePreferences, type Preferences } from './
 import { describeMove, describeResult } from './ui/text';
 
 const HELP_SEEN_KEY = 'pseudochess.helpSeen';
+
+type Screen = 'home' | 'game';
+/** Why the rules are showing: automatically before a first game, or because the player asked. */
+type HelpMode = 'intro' | 'asked';
 
 function readHelpSeen(): boolean {
   try {
@@ -38,7 +43,8 @@ export default function App() {
   const [saved] = useState(loadGame);
   const game = useGame({ playerColor: saved?.playerColor ?? 'w', difficulty: saved?.difficulty ?? 'medium' }, saved?.moves);
   const { snapshot, settings } = game;
-  const [helpOpen, setHelpOpen] = useState(() => !readHelpSeen());
+  const [screen, setScreen] = useState<Screen>('home');
+  const [help, setHelp] = useState<HelpMode | null>(null);
   const [newGameOpen, setNewGameOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [prefs, setPrefs] = useState<Preferences>(loadPreferences);
@@ -63,33 +69,75 @@ export default function App() {
     const count = snapshot.history.length;
     const grew = count > heardMoves.current;
     heardMoves.current = count;
-    if (!grew || !prefs.sound) return;
+    if (!grew || !prefs.sound || screen !== 'game') return;
     const last = snapshot.history[count - 1]!;
     if (resultText) playSound(resultText.outcome === 'win' ? 'win' : resultText.outcome === 'loss' ? 'loss' : 'draw');
     else if (last.san.endsWith('+')) playSound('check');
     else playSound(last.captured ? 'capture' : 'move');
-  }, [snapshot, resultText, prefs.sound]);
+  }, [snapshot, resultText, prefs.sound, screen]);
 
   const player = settings.playerColor;
   const ai = opponentOf(player);
   const aiToMove = snapshot.result.status === 'ongoing' && snapshot.turn === ai;
 
+  const inProgress: GameInProgress | null =
+    snapshot.history.length > 0 && snapshot.result.status === 'ongoing'
+      ? { moveNumber: Math.floor(snapshot.history.length / 2) + 1, playerColor: player, difficulty: settings.difficulty }
+      : null;
+
   const closeHelp = () => {
     writeHelpSeen();
-    setHelpOpen(false);
+    setHelp(null);
+  };
+
+  /** Opens the board; the very first time, the rules come up before the first move. */
+  const enterGame = () => {
+    setScreen('game');
+    if (!readHelpSeen()) setHelp('intro');
   };
 
   const startGame = (playerColor: Color, difficulty: Difficulty) => {
     setNewGameOpen(false);
     game.newGame({ playerColor, difficulty });
+    enterGame();
   };
 
+  const dialogs = (
+    <>
+      <HowToPlay open={help !== null} onClose={closeHelp} actionLabel={help === 'intro' ? 'Start playing' : 'Close'} />
+      <SettingsDialog open={settingsOpen} prefs={prefs} onChange={setPrefs} onClose={() => setSettingsOpen(false)} />
+    </>
+  );
+
+  if (screen === 'home') {
+    return (
+      <>
+        <Home
+          inProgress={inProgress}
+          initialColor={player}
+          initialDifficulty={settings.difficulty}
+          onContinue={enterGame}
+          onStart={startGame}
+          onHelp={() => setHelp('asked')}
+          onSettings={() => setSettingsOpen(true)}
+        />
+        {dialogs}
+      </>
+    );
+  }
+
   return (
-    <div className="min-h-dvh">
+    <div className="min-h-dvh animate-enter">
       <header className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 pt-4 pb-2 sm:px-6 lg:pt-6">
         <Wordmark />
         <nav aria-label="Game menu" className="flex items-center gap-1.5">
-          <Button aria-label="How to play" onClick={() => setHelpOpen(true)} className="w-11 rounded-full px-0 text-lg">
+          <Button aria-label="Home" onClick={() => setScreen('home')} className="w-11 rounded-full px-0">
+            <svg aria-hidden="true" viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9.5 10 3.5l7 6" />
+              <path d="M5 8v8.5h10V8" />
+            </svg>
+          </Button>
+          <Button aria-label="How to play" onClick={() => setHelp('asked')} className="w-11 rounded-full px-0 text-lg">
             ?
           </Button>
           <Button aria-label="Settings" onClick={() => setSettingsOpen(true)} className="w-11 rounded-full px-0">
@@ -177,12 +225,11 @@ export default function App() {
       />
       <GameOverDialog
         result={resultText}
-        open={gameOverOpen && !helpOpen}
+        open={gameOverOpen && help === null}
         onClose={() => setDismissedAt(snapshot.history.length)}
         onPlayAgain={() => game.newGame()}
       />
-      <HowToPlay open={helpOpen} onClose={closeHelp} />
-      <SettingsDialog open={settingsOpen} prefs={prefs} onChange={setPrefs} onClose={() => setSettingsOpen(false)} />
+      {dialogs}
     </div>
   );
 }

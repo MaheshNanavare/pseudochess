@@ -47,7 +47,7 @@ Everything needed to submit the PWA to the Microsoft Store with PWABuilder (buil
 | App icon (PWABuilder source) | `public/icons/icon-512.png` | 512 x 512 | `npm run icons` |
 | 1:1 Store logo | `store-assets/store-logo-1080.png` | 1080 x 1080 | `npm run icons` |
 | 16:9 Super hero art (no text; the Store overlays the title) | `store-assets/hero-1920x1080.png` | 1920 x 1080 | `npm run icons` |
-| Screenshots (desktop) | `store-assets/screenshots/desktop-light-1920x1080.png`, `desktop-dark-1920x1080.png` | 1920 x 1080 | `npm run screenshots` |
+| Screenshots (desktop) | `store-assets/screenshots/home-dark-1920x1080.png` (home page, use first), `desktop-light-1920x1080.png`, `desktop-dark-1920x1080.png` | 1920 x 1080 | `npm run screenshots` |
 | Manifest screenshots | `public/screenshots/wide.png`, `narrow.png` | 1366 x 768, 780 x 1688 | `npm run screenshots` |
 
 The visual language behind the icon and hero art is described in `store-assets/philosophy.md`.

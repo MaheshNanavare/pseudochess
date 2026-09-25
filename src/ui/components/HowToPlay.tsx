@@ -4,9 +4,11 @@ import { Modal } from './Modal';
 interface HowToPlayProps {
   open: boolean;
   onClose: () => void;
+  /** Label of the closing button: an invitation on the first visit, otherwise just Close. */
+  actionLabel?: string;
 }
 
-export function HowToPlay({ open, onClose }: HowToPlayProps) {
+export function HowToPlay({ open, onClose, actionLabel = 'Close' }: HowToPlayProps) {
   return (
     <Modal open={open} onClose={onClose} labelledBy="how-to-play-title" wide>
       <h2 id="how-to-play-title" className="text-3xl font-extrabold tracking-tight [font-stretch:80%]">
@@ -47,7 +49,7 @@ export function HowToPlay({ open, onClose }: HowToPlayProps) {
       </div>
 
       <Button variant="primary" onClick={onClose} className="mt-6 w-full">
-        Start playing
+        {actionLabel}
       </Button>
     </Modal>
   );

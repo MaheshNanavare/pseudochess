@@ -1,6 +1,7 @@
 /**
- * Headless UI smoke test: loads the app, dismisses the help screen, plays a
- * few moves against the AI by clicking squares, and saves screenshots.
+ * Headless UI smoke test: loads the home page, starts a game, dismisses the
+ * help screen, plays a few moves against the AI by clicking squares, and
+ * saves screenshots.
  *
  * Start a server first (npm run build && npm run preview), then:
  *   npm run ui:smoke -- [url] [outDir]
@@ -26,6 +27,12 @@ async function playAnyMove(page: Page): Promise<string> {
   const promo = page.getByRole('dialog', { name: 'Promote pawn to' });
   if (await promo.isVisible()) await promo.getByRole('button').first().click();
   return label;
+}
+
+/** From the home page into a fresh game; the rules show before the first game. */
+async function startFromHome(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Start new game' }).click();
+  await page.getByRole('button', { name: 'Start playing' }).click();
 }
 
 async function waitForPlayerTurn(page: Page): Promise<void> {
@@ -55,7 +62,7 @@ async function checkInteractions(): Promise<void> {
   page.on('pageerror', (err) => errors.push(`[interactions] ${err.message}`));
   await page.goto(url);
   await page.waitForLoadState('networkidle');
-  await page.getByRole('button', { name: 'Start playing' }).click();
+  await startFromHome(page);
 
   // Drag the d2 pawn to d4 with the mouse.
   const box = async (sq: string) => (await page.locator(`button[aria-label^="${sq},"]`).boundingBox())!;
@@ -84,11 +91,18 @@ async function checkInteractions(): Promise<void> {
   await page.keyboard.press('ArrowUp');
   check((await page.evaluate(() => document.activeElement?.getAttribute('data-square'))) === 'e5', 'arrow keys move focus between squares');
 
-  // Resume after reload.
+  // Resume after reload: the app opens on Home, which offers to continue.
   const before = await historyText(page);
   await page.reload();
   await page.waitForLoadState('networkidle');
+  await page.getByRole('button', { name: /Continue game/ }).click();
   check((await historyText(page)) === before, 'game resumes after reload');
+
+  // Home and back.
+  await page.getByRole('button', { name: 'Home' }).click();
+  check(await page.getByRole('heading', { name: 'New game' }).isVisible(), 'home button opens the home page');
+  await page.getByRole('button', { name: /Continue game/ }).click();
+  check((await historyText(page)) === before, 'continue returns to the same game');
 
   // Settings: board theme persists.
   await page.getByRole('button', { name: 'Settings' }).click();
@@ -121,13 +135,14 @@ try {
 
     await page.goto(url);
     await page.waitForLoadState('networkidle');
-    await page.screenshot({ path: `${outDir}/${viewport.name}-1-help.png` });
+    await page.waitForTimeout(4500); // let the landing animation finish
+    await page.screenshot({ path: `${outDir}/${viewport.name}-1-home.png` });
 
     // Reconnaissance: list the interactive elements we can see.
     const buttons = await page.getByRole('button').allInnerTexts();
     console.log(`[${viewport.name}] buttons:`, buttons.filter((t) => t.trim()).slice(0, 12));
 
-    await page.getByRole('button', { name: 'Start playing' }).click();
+    await startFromHome(page);
 
     await clickSquare(page, 'e2');
     await clickSquare(page, 'e4');
