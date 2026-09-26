@@ -14,7 +14,7 @@ import { SettingsDialog } from './ui/components/SettingsDialog';
 import { StatusLine } from './ui/components/StatusLine';
 import { Wordmark } from './ui/components/Wordmark';
 import { useGame } from './ui/hooks/useGame';
-import { playSound } from './ui/sound';
+import { playCapture, playSound } from './ui/sound';
 import { loadGame, loadPreferences, savePreferences, type GameSettings, type Preferences } from './ui/storage';
 import { COLOR_NAMES, describeMove, describeResult } from './ui/text';
 
@@ -84,7 +84,8 @@ export default function App() {
     const last = snapshot.history[count - 1]!;
     if (resultText) playSound(resultText.outcome === 'win' ? 'win' : resultText.outcome === 'loss' ? 'loss' : 'draw');
     else if (last.san.endsWith('+')) playSound('check');
-    else playSound(last.captured ? 'capture' : 'move');
+    else if (last.captured) playCapture(last.captured);
+    else playSound('move');
   }, [snapshot, resultText, prefs.sound, screen]);
 
   const top = opponentOf(player);

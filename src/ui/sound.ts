@@ -3,9 +3,16 @@
  * add nothing to the download). The context is created on first use, which
  * always follows a user gesture in this app.
  */
-export type SoundKind = 'move' | 'capture' | 'check' | 'win' | 'loss' | 'draw';
+import type { PieceType } from '../engine/types';
+import { captureSoundFor, renderCaptureSound, type CaptureSound } from './captureSounds';
+
+export type SoundKind = 'move' | 'check' | 'win' | 'loss' | 'draw';
+
+/** Capture sounds are rendered at -3 dB; this brings them in just above the move click. */
+const CAPTURE_GAIN = 0.45;
 
 let context: AudioContext | null = null;
+const captureBuffers = new Map<CaptureSound, AudioBuffer>();
 
 function audio(): AudioContext | null {
   try {
@@ -38,10 +45,6 @@ export function playSound(kind: SoundKind): void {
     case 'move':
       tone(ctx, 520, t, 0.07, 'triangle', 0.18);
       break;
-    case 'capture':
-      tone(ctx, 300, t, 0.09, 'triangle', 0.25);
-      tone(ctx, 200, t + 0.05, 0.12, 'sine', 0.2);
-      break;
     case 'check':
       tone(ctx, 880, t, 0.12, 'sine', 0.16);
       tone(ctx, 660, t + 0.09, 0.14, 'sine', 0.12);
@@ -57,4 +60,28 @@ export function playSound(kind: SoundKind): void {
       tone(ctx, 440, t + 0.18, 0.2, 'sine', 0.1);
       break;
   }
+}
+
+/** Rendered once per sound, on first use. */
+function captureBuffer(ctx: AudioContext, kind: CaptureSound): AudioBuffer {
+  let buffer = captureBuffers.get(kind);
+  if (!buffer) {
+    const samples = renderCaptureSound(kind, ctx.sampleRate);
+    buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
+    buffer.copyToChannel(samples, 0);
+    captureBuffers.set(kind, buffer);
+  }
+  return buffer;
+}
+
+/** The capture sound for the piece that was taken. */
+export function playCapture(captured: PieceType): void {
+  const ctx = audio();
+  if (!ctx) return;
+  const source = ctx.createBufferSource();
+  const gain = ctx.createGain();
+  source.buffer = captureBuffer(ctx, captureSoundFor(captured));
+  gain.gain.value = CAPTURE_GAIN;
+  source.connect(gain).connect(ctx.destination);
+  source.start();
 }
