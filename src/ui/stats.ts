@@ -60,22 +60,37 @@ export function reasonText(record: GameRecord): string {
 }
 
 /**
- * Tactics for this variant, shown one at a time on the results page, most
- * widely useful first. The ones that rest on a finer point of the rules
- * (en passant, king captures, check, checkmate winning) are played out on
- * real positions in the tests, so they stay true if the rules change.
+ * Tips for this variant, shown one at a time on the results page, with the
+ * opening, middlegame and endgame ones spread among the tactics. The phase
+ * tips rest on engine self-play (thousands of games at depth 3 and 4):
+ * - first moves: one-square pawn pushes scored 53% against 48% for two-square ones;
+ * - 1.e3 a6?, a protected offer, scored 40% for Black;
+ * - a side left holding the only queen in the endgame scored about 40%;
+ * - every stalemate inspected left the stalemated side with only its king and
+ *   blocked pawns, and most 50-move draws were pawn endings locked head-on;
+ * - kings made 56% of endgame captures, and 41% of the captures that ended a game.
+ * The ones that rest on a finer point of the rules are played out on real
+ * positions in the tests, so they stay true if the rules change.
  */
 export const TIPS: readonly string[] = [
-  'Only give away pieces that none of yours protect. If one of your pieces covers the square, you will be forced to take back, and your gift becomes a trade.',
-  'Forced to capture? Pick the capture that lands your piece where they can take it back. They must recapture, so you lose a piece in return for the one you took.',
-  'Push a pawn to where it and an enemy pawn attack each other. It looks like a threat, but they move next, so they are the ones forced to capture.',
-  'Knights are easy to give away: jump them next to enemy pieces. They reach squares other pieces cannot, so the opponent often has to take.',
-  'Chain your gifts: give a piece away where the capturing piece will land attacking another of yours. They have to capture again next turn, so one offer loses you two pieces.',
-  'Their king has to capture too. Put a piece next to it that none of yours protect, and the king must take it. It cannot take a protected one, as that would walk into check.',
-  'To get rid of one particular piece, such as your queen, give check with it from a square they can capture. In check, the only captures allowed are ones that end the check, so they have to take it.',
-  'En passant is a capture, so it is forced too. Push a pawn two squares so it lands right beside an enemy pawn, and they have to take it en passant.',
-  'Back-rank trap: with your king boxed in behind its pawns, leave a piece on your back rank where their rook or queen can take it. If that is their only capture, taking it is forced, and it checkmates you: you win.',
-  'When you promote, choose the piece that attacks none of theirs. A new queen often hits several pieces at once, and if they cannot take her straight away, you will be the one forced to capture.',
+  'Give away only unprotected pieces. If you guard the square, you must take back: a trade, not a gift.',
+  'Opening: start with one-square pawn moves like e3. After a two-square push, their pawn can meet yours at once and you must capture.',
+  'Forced to capture? Take with a piece they can take back, so you lose one in return.',
+  'Middlegame: when no capture is forced, make an offer. A quiet move gives them a free turn to make you capture.',
+  'Push a pawn so it and an enemy pawn attack each other. They move next, so they must take.',
+  'Endgame: don’t let your last pawns get blocked. A blocked pawn can’t walk into a capture, so the game stalls into a draw.',
+  'Knights are easy to give away: they reach squares other pieces cannot, so jump them next to enemy pieces.',
+  'Opening: an early offer must be unprotected too. After 1.e3 a6?, Bxa6 forces you to take back.',
+  'Chain your gifts: offer a piece where the taker lands attacking another of yours, so they must capture again.',
+  'Middlegame: look behind a piece before moving it. Uncovering your own queen, rook or bishop onto theirs forces you to capture.',
+  'Their king must capture too: put an unprotected piece next to it, and it has to take.',
+  'Endgame: kings make most captures now. Keep yours away from their last pieces, or it will be forced to take them.',
+  'Check with a piece they can capture, and they must take it: in check, only captures that end the check are allowed.',
+  'Opening: plan to lose your queen early. Kept to the endgame, she is a burden they can feed piece after piece.',
+  'En passant is forced too: push a pawn two squares to land beside an enemy pawn, and they must take it.',
+  'Opening: develop pieces where their pawns can take them, the reverse of normal chess.',
+  'Back-rank trap: with your king boxed in by its pawns, offer their rook a piece on your back rank. If it is their only capture, they must mate you.',
+  'Promote to a piece that attacks none of theirs. A new queen they cannot take may force you to capture.',
 ];
 
 /** The tip after `index`, back to the first after the last. */

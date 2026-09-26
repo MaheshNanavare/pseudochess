@@ -79,8 +79,11 @@ describe('addRecord', () => {
 });
 
 describe('tips', () => {
-  it('has ten different tips, stepped through in a loop', () => {
-    expect(TIPS).toHaveLength(10);
+  it('has eighteen different tips, stepped through in a loop', () => {
+    expect(TIPS).toHaveLength(18);
+    expect(TIPS.filter((t) => t.startsWith('Opening:'))).toHaveLength(4);
+    expect(TIPS.filter((t) => t.startsWith('Middlegame:'))).toHaveLength(2);
+    expect(TIPS.filter((t) => t.startsWith('Endgame:'))).toHaveLength(2);
     expect(new Set(TIPS).size).toBe(TIPS.length);
     expect(nextTip(0)).toBe(1);
     expect(nextTip(TIPS.length - 1)).toBe(0);
@@ -118,5 +121,14 @@ describe('tips hold under the rules', () => {
   it('in check, the only captures allowed are ones that end the check', () => {
     // axb4 is on offer, but the e5 rook gives check, so dxe5 is the only move.
     expect(sans(new Board('4k3/8/3p4/p3R3/1P6/8/8/4K3 b - - 0 1'))).toEqual(['dxe5']);
+  });
+
+  it('opening: after 1.e3 a6?, Bxa6 is forced and Black must take back', () => {
+    const board = new Board();
+    play(board, 'e2e3');
+    play(board, 'a7a6');
+    expect(sans(board)).toEqual(['Bxa6']);
+    play(board, 'f1a6');
+    expect(legalMoves(board).every((m) => m.to === 'a6' && m.captured === 'b')).toBe(true);
   });
 });

@@ -182,10 +182,7 @@ export function StatsScreen({ history, onHome, audio }: StatsScreenProps) {
                 </span>
               </p>
             </div>
-            <div className="mt-3 flex items-center justify-between gap-4">
-              <p className="text-sm text-muted tabular-nums">
-                Tip {tip + 1} of {TIPS.length}
-              </p>
+            <div className="mt-3 flex justify-end">
               <Button onClick={() => setTip(nextTip)}>Next tip</Button>
             </div>
           </aside>
