@@ -35,6 +35,7 @@ Same as normal chess: same board, same pieces, same starting position, same piec
 - **Stalemate** (no legal moves, not in check) = draw.
 - **Threefold repetition** = draw.
 - **50-move rule** (50 moves by each side with no capture and no pawn move) = draw.
+- **Agreement**: on your turn you may offer a draw. In a two-player game the other player accepts or declines. The computer accepts only under the rule in section 2 ("Draw offers"). After a declined offer, you can offer again once another move has been played.
 
 ### Move legality summary
 ```
@@ -62,6 +63,13 @@ Each promotion option (Q, R, B, N) is a separate move in the list.
 | Easy   | 3            | Pick randomly from the top 2 to 3 moves |
 | Medium | 4            | Best move |
 | Hard   | 5 minimum, then deeper (up to 10) within ~1.5 s | Best move. Self-play: depth 6 beats depth 4 by +175 Elo |
+
+### Draw offers
+The computer accepts a draw offer (at every difficulty) only when both hold:
+1. Only kings and pawns are on the board.
+2. No capture can become available in the next 2 plies, whatever is played: the side to move has no capture now, and after each of its legal moves the other side has no capture either.
+
+Otherwise it declines. Implemented in `acceptsDrawOffer` (`src/engine/draw.ts`).
 
 ---
 

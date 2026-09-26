@@ -38,4 +38,9 @@ describe('describeResult', () => {
   it('reports draws the same way in both modes', () => {
     expect(describeResult({ status: 'draw', reason: 'stalemate' }, null)?.title).toBe('Draw');
   });
+
+  it('says who agreed to a draw', () => {
+    expect(describeResult({ status: 'draw', reason: 'agreement' }, 'w')?.detail).toBe('The computer accepted your draw offer.');
+    expect(describeResult({ status: 'draw', reason: 'agreement' }, null)?.detail).toBe('Both players agreed to a draw.');
+  });
 });

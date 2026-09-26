@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { opponentOf, type Color } from './engine/types';
 import { Board } from './ui/components/Board';
 import { Button } from './ui/components/Button';
-import { CaptureNote } from './ui/components/CaptureNote';
+import { DrawOfferDialog } from './ui/components/DrawOfferDialog';
+import { GameNotice } from './ui/components/GameNotice';
 import { GameOverDialog } from './ui/components/GameOverDialog';
 import { Home, type GameInProgress } from './ui/components/Home';
 import { HowToPlay } from './ui/components/HowToPlay';
@@ -14,6 +15,7 @@ import { SettingsDialog } from './ui/components/SettingsDialog';
 import { StatusLine } from './ui/components/StatusLine';
 import { Wordmark } from './ui/components/Wordmark';
 import { useGame } from './ui/hooks/useGame';
+import { music } from './ui/music';
 import { playCapture, playSound } from './ui/sound';
 import { loadGame, loadPreferences, savePreferences, type GameSettings, type Preferences } from './ui/storage';
 import { COLOR_NAMES, describeMove, describeResult } from './ui/text';
@@ -42,21 +44,24 @@ function writeHelpSeen(): void {
 
 export default function App() {
   const [saved] = useState(loadGame);
-  const game = useGame(
-    {
-      opponent: saved?.opponent ?? 'computer',
-      playerColor: saved?.playerColor ?? 'w',
-      difficulty: saved?.difficulty ?? 'medium',
-    },
-    saved?.moves,
-  );
-  const { snapshot, settings } = game;
   const [screen, setScreen] = useState<Screen>('home');
   const [help, setHelp] = useState<HelpMode | null>(null);
   const [newGameOpen, setNewGameOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [prefs, setPrefs] = useState<Preferences>(loadPreferences);
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+  // The only legal move is played for you only while you can see the board.
+  const boardInView = screen === 'game' && help === null && !newGameOpen && !settingsOpen;
+  const game = useGame(
+    {
+      opponent: saved?.opponent ?? 'computer',
+      playerColor: saved?.playerColor ?? 'w',
+      difficulty: saved?.difficulty ?? 'medium',
+    },
+    saved,
+    prefs.autoMove && boardInView,
+  );
+  const { snapshot, settings } = game;
 
   const player = settings.playerColor;
   // Two people on one device are both "you", so they are named by colour instead.
@@ -73,6 +78,9 @@ export default function App() {
     if (prefs.boardTheme === 'dusk') delete document.documentElement.dataset.board;
     else document.documentElement.dataset.board = prefs.boardTheme;
   }, [prefs]);
+
+  useEffect(() => music.setEnabled(prefs.music), [prefs.music]);
+  useEffect(() => music.setTrack(screen), [screen]);
 
   // Sounds for new moves and for the end of the game (not for undo or loading a saved game).
   const heardMoves = useRef(snapshot.history.length);
@@ -110,6 +118,16 @@ export default function App() {
     setNewGameOpen(false);
     game.newGame(next);
     enterGame();
+  };
+
+  // A draw by agreement adds no move, so its sound is played here rather than by the move sounds above.
+  const offerDraw = () => {
+    if (game.offerDraw() === 'accepted' && prefs.sound) playSound('draw');
+  };
+
+  const answerDraw = (accept: boolean) => {
+    game.answerDraw(accept);
+    if (accept && prefs.sound) playSound('draw');
   };
 
   const dialogs = (
@@ -172,26 +190,23 @@ export default function App() {
             toMove={toMove(top)}
             thinking={!game.twoPlayer && toMove(top)}
           />
-          <div className="relative">
-            <Board
-              pieces={snapshot.pieces}
-              history={snapshot.history}
-              orientation={player}
-              selected={game.selected}
-              targets={game.targets}
-              movable={game.movable}
-              forced={snapshot.forced}
-              hints={prefs.hints}
-              lastMove={game.lastMove}
-              checkSquare={snapshot.inCheck ? snapshot.kingSquare : undefined}
-              interactive={game.isPlayerTurn}
-              nudging={game.nudge !== null}
-              onSquareClick={game.onSquareClick}
-              onDragStart={game.select}
-              onDrop={game.tryMove}
-            />
-            <CaptureNote nudge={game.nudge} orientation={player} onDismiss={game.dismissNudge} />
-          </div>
+          <Board
+            pieces={snapshot.pieces}
+            history={snapshot.history}
+            orientation={player}
+            selected={game.selected}
+            targets={game.targets}
+            movable={game.movable}
+            forced={snapshot.forced}
+            hints={prefs.hints}
+            lastMove={game.lastMove}
+            checkSquare={snapshot.inCheck ? snapshot.kingSquare : undefined}
+            interactive={game.isPlayerTurn && !game.autoMoving}
+            nudging={game.notice?.tone === 'must'}
+            onSquareClick={game.onSquareClick}
+            onDragStart={game.select}
+            onDrop={game.tryMove}
+          />
           <PlayerStrip
             name={game.twoPlayer ? COLOR_NAMES[player] : 'You'}
             color={player}
@@ -208,7 +223,10 @@ export default function App() {
               mover={game.twoPlayer ? COLOR_NAMES[snapshot.turn] : null}
               forced={snapshot.forced}
               inCheck={snapshot.inCheck}
+              autoMoving={game.autoMoving}
+              drawOffer={game.drawOffer ? COLOR_NAMES[game.drawOffer] : null}
             />
+            <GameNotice notice={game.notice} onDismiss={game.dismissNotice} />
             <p aria-live="polite" className="sr-only">
               {game.lastMove ? describeMove(game.lastMove, perspective) : ''}
             </p>
@@ -220,6 +238,12 @@ export default function App() {
                 </svg>
                 Undo move
               </Button>
+              {ongoing && (
+                <Button onClick={offerDraw} disabled={!game.canOfferDraw}>
+                  <span aria-hidden="true" className="text-base leading-none font-extrabold">½</span>
+                  Offer draw
+                </Button>
+              )}
               {resultText && (
                 <Button variant="primary" onClick={() => game.newGame()}>
                   Play again
@@ -234,6 +258,7 @@ export default function App() {
       </main>
 
       <PromotionPicker open={game.pendingPromotion !== null} color={snapshot.turn} onChoose={game.choosePromotion} />
+      <DrawOfferDialog offeredBy={game.drawOffer} onAnswer={answerDraw} />
       <NewGameDialog
         key={newGameOpen ? 'open' : 'closed'}
         open={newGameOpen}

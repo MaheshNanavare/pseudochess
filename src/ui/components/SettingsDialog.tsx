@@ -66,8 +66,10 @@ export function SettingsDialog({ open, prefs, onChange, onClose }: SettingsDialo
       </fieldset>
 
       <div className="mt-5 divide-y divide-line border-y border-line">
+        <Toggle label="Music" checked={prefs.music} onChange={(music) => onChange({ ...prefs, music })} />
         <Toggle label="Sound effects" checked={prefs.sound} onChange={(sound) => onChange({ ...prefs, sound })} />
         <Toggle label="Show where a piece can move" checked={prefs.hints} onChange={(hints) => onChange({ ...prefs, hints })} />
+        <Toggle label="Play the only legal move for me" checked={prefs.autoMove} onChange={(autoMove) => onChange({ ...prefs, autoMove })} />
       </div>
 
       <div className="mt-6 flex items-center justify-between gap-4">

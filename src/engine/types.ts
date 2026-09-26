@@ -28,7 +28,8 @@ export interface Move extends MoveInput {
 }
 
 export type WinReason = 'checkmated' | 'bare-king';
-export type DrawReason = 'stalemate' | 'threefold-repetition' | 'fifty-move-rule' | 'bare-kings';
+/** 'agreement' never comes from the position: the players (or the computer) agreed to it. */
+export type DrawReason = 'stalemate' | 'threefold-repetition' | 'fifty-move-rule' | 'bare-kings' | 'agreement';
 
 export type GameResult =
   | { status: 'ongoing' }

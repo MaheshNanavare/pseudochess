@@ -42,6 +42,14 @@ export default defineConfig({
         // Screenshots are only for install dialogs and store listings; no need to precache them.
         globPatterns: ['**/*.{js,css,html,svg,ico,webmanifest,woff2}', 'icons/*.png'],
         navigateFallbackDenylist: [/^\/privacy/],
+        // Music is ~7 MB, too much to precache on install: cache each track the first time it plays.
+        runtimeCaching: [
+          {
+            urlPattern: /\/audio\/.+\.mp3$/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'music', cacheableResponse: { statuses: [200] }, expiration: { maxEntries: 4 } },
+          },
+        ],
       },
     }),
   ],

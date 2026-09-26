@@ -41,6 +41,7 @@ export function describeResult(result: GameResult, player: Color | null): Result
       'threefold-repetition': 'The same position appeared three times.',
       'fifty-move-rule': '50 moves each with no capture and no pawn move.',
       'bare-kings': 'Only the two kings are left.',
+      agreement: player === null ? 'Both players agreed to a draw.' : 'The computer accepted your draw offer.',
     }[result.reason];
     return { outcome: 'draw', title: 'Draw', detail };
   }

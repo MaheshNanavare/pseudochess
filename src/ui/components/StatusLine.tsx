@@ -8,17 +8,29 @@ interface StatusLineProps {
   mover: string | null;
   forced: boolean;
   inCheck: boolean;
+  /** The only legal move is about to be played automatically. */
+  autoMoving: boolean;
+  /** Two players: the colour that offered a draw, waiting for the other's answer. */
+  drawOffer: string | null;
 }
 
 const RESULT_TONE = { win: 'text-jade', loss: 'text-rose', draw: '' } as const;
 
 /** One sentence that always says what happens next. Announced to screen readers. */
-export function StatusLine({ result, waiting, mover, forced, inCheck }: StatusLineProps) {
+export function StatusLine({ result, waiting, mover, forced, inCheck, autoMoving, drawOffer }: StatusLineProps) {
   let body;
   if (result) {
     body = (
       <p>
         <strong className={RESULT_TONE[result.outcome]}>{result.title}.</strong> {result.detail}
+      </p>
+    );
+  } else if (drawOffer) {
+    body = <p>{drawOffer} offers a draw.</p>;
+  } else if (autoMoving) {
+    body = (
+      <p>
+        Only one legal move, playing it for {mover ?? 'you'}<span className="animate-think">…</span>
       </p>
     );
   } else if (waiting) {

@@ -6,7 +6,7 @@
  * Start a server first (npm run build && npm run preview), then:
  *   npm run ui:smoke -- [url] [outDir]
  */
-import { chromium, type Page } from 'playwright';
+import { chromium, type Locator, type Page } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
 const url = process.argv[2] ?? 'http://localhost:4173';
@@ -142,7 +142,8 @@ async function checkTwoPlayerAndForcedNote(): Promise<void> {
   await clickSquare(page, 'g1');
   check((await note.textContent())?.includes('knight on g1 has to wait') ?? false, 'note when picking a piece that cannot capture');
   await page.waitForTimeout(400); // let the note finish dropping in
-  await page.screenshot({ path: `${outDir}/two-player-note.png` });
+  check(await clearOfBoard(page, note), 'the note does not cover the board');
+  await page.screenshot({ path: `${outDir}/two-player-note.png`, fullPage: true });
   await clickSquare(page, 'e4');
   check(!(await note.isVisible()), 'note clears when the capturing piece is picked');
   await clickSquare(page, 'e5');
@@ -152,8 +153,72 @@ async function checkTwoPlayerAndForcedNote(): Promise<void> {
 
   await page.getByRole('button', { name: 'Undo move' }).click();
   check(!(await historyText(page)).includes('exd5') && (await historyText(page)).includes('d5'), 'two players: undo takes back one move');
+
+  const offer = page.getByRole('button', { name: 'Offer draw' });
+  await offer.click();
+  const answer = page.getByRole('dialog', { name: 'White offers a draw' });
+  check(await answer.isVisible(), 'two players: a draw offer asks the other player');
+  await answer.getByRole('button', { name: 'Decline' }).click();
+  check(await offer.isDisabled(), 'after a declined offer, no new offer until a move is played');
+
   await page.getByRole('button', { name: 'Home' }).click();
   check((await page.getByRole('button', { name: /Continue game/ }).textContent())?.includes('two players') ?? false, 'home offers to continue the two-player game');
+  await context.close();
+}
+
+/** True when the element and the board do not overlap on screen. */
+async function clearOfBoard(page: Page, el: Locator): Promise<boolean> {
+  const a = await el.boundingBox();
+  const b = await page.getByRole('group', { name: /Chess board/ }).boundingBox();
+  if (!a || !b) return false;
+  return a.x >= b.x + b.width || b.x >= a.x + a.width || a.y >= b.y + b.height || b.y >= a.y + a.height;
+}
+
+/** Draw offers against the computer and between two players, the only-move autoplay, and music. */
+async function checkDrawsAutoMoveAndMusic(): Promise<void> {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await context.addInitScript(() => {
+    localStorage.setItem('pseudochess.helpSeen', '1');
+    localStorage.setItem('pseudochess.prefs', JSON.stringify({ autoMove: true }));
+  });
+  const page = await context.newPage();
+  page.on('pageerror', (err) => errors.push(`[draws] ${err.message}`));
+  const audio: string[] = [];
+  page.on('requestfinished', (req) => {
+    if (req.url().includes('/audio/')) audio.push(new URL(req.url()).pathname);
+  });
+  await page.goto(url);
+  await page.waitForLoadState('networkidle');
+  check(audio.length === 0, 'no music before the first interaction');
+  await page.mouse.click(5, 5);
+  await page.waitForTimeout(1500);
+  check(audio.includes('/audio/home.mp3'), 'home music starts after the first interaction');
+
+  // Against the computer at the start: pieces everywhere, so the draw is declined.
+  await page.getByRole('button', { name: 'Start new game' }).click();
+  await page.getByRole('button', { name: 'Offer draw' }).click();
+  const notice = page.getByRole('alert');
+  check((await notice.textContent())?.includes('Draw declined') ?? false, 'the computer declines a draw with pieces on the board');
+  check(await clearOfBoard(page, notice), 'the draw notice does not cover the board');
+  await page.waitForTimeout(1500);
+  check(audio.includes('/audio/game.mp3'), 'game music plays on the game screen');
+
+  // Two players: after 1.e4 d5 the only legal move, exd5, is played automatically.
+  await page.getByRole('button', { name: 'New game', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'New game' });
+  await dialog.getByText('A friend', { exact: true }).click();
+  await dialog.getByRole('button', { name: 'Start game' }).click();
+  await clickSquare(page, 'e2');
+  await clickSquare(page, 'e4');
+  await clickSquare(page, 'd7');
+  await clickSquare(page, 'd5');
+  // Then Black's only legal move is Qxd5, which is played for Black too.
+  await page.waitForFunction(() => document.querySelector('#moves-title')?.parentElement?.textContent?.includes('Qxd5'), undefined, { timeout: 5000 });
+  check(true, 'the only legal move is played automatically for each side when the setting is on');
+
+  await page.getByRole('button', { name: 'Offer draw' }).click();
+  await page.getByRole('dialog', { name: 'White offers a draw' }).getByRole('button', { name: 'Accept draw' }).click();
+  check(await page.getByRole('heading', { name: 'Draw' }).isVisible(), 'two players: an accepted offer ends the game in a draw');
   await context.close();
 }
 
@@ -199,6 +264,7 @@ try {
   }
   await checkInteractions();
   await checkTwoPlayerAndForcedNote();
+  await checkDrawsAutoMoveAndMusic();
 } finally {
   await browser.close();
 }
