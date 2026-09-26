@@ -240,7 +240,7 @@ async function checkDrawsAutoMoveAndMusic(): Promise<void> {
   await context.close();
 }
 
-/** Leaving a game (keep or resign), and the results page with its shuffled tips. */
+/** Leaving a game (keep or resign), and the results page with its tips, one at a time. */
 async function checkExitAndResults(): Promise<void> {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await context.addInitScript(() => localStorage.setItem('pseudochess.helpSeen', '1'));
@@ -251,8 +251,11 @@ async function checkExitAndResults(): Promise<void> {
 
   await page.getByRole('button', { name: 'Your results' }).click();
   check((await page.locator('main').textContent())?.includes('No finished games yet') ?? false, 'results page explains when there are no games');
-  const tips = async () => (await page.getByRole('complementary').locator('li').allTextContents()).join('|');
-  const firstTips = await tips();
+  const tip = async () => (await page.getByRole('complementary').locator('[aria-live]').textContent()) ?? '';
+  const firstTip = await tip();
+  await page.getByRole('button', { name: 'Next tip' }).click();
+  const secondTip = await tip();
+  check(firstTip !== '' && secondTip !== '' && secondTip !== firstTip, 'the results page shows one tip, and Next tip moves on to another');
   await page.getByRole('button', { name: 'Home', exact: true }).click();
 
   await page.getByRole('button', { name: 'Start new game' }).click();
@@ -273,10 +276,8 @@ async function checkExitAndResults(): Promise<void> {
   const main = (await page.locator('main').textContent()) ?? '';
   check(main.includes('Loss') && main.includes('Resigned') && main.includes('1 game'), 'the resigned game is recorded as a loss');
   await page.screenshot({ path: `${outDir}/results.png`, fullPage: true });
-  const reshuffled = (await tips()) !== firstTips;
-  await page.getByRole('button', { name: 'Home', exact: true }).click();
-  await page.getByRole('button', { name: 'Your results' }).click();
-  check(reshuffled || (await tips()) !== firstTips, 'tips reshuffle on each visit');
+  const laterTip = await tip();
+  check(laterTip !== firstTip && laterTip !== secondTip, 'the next visit opens on a tip not seen last time');
   await context.close();
 }
 

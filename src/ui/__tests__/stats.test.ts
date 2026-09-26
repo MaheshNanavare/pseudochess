@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Difficulty } from '../../engine/types';
-import { outcomeFor, reasonText, shuffled, summarize, TIPS, winRate } from '../stats';
+import { Board, getGameResult, legalMoves, type Difficulty, type Square } from '../../engine';
+import { nextTip, outcomeFor, reasonText, summarize, TIPS, winRate } from '../stats';
 import { addRecord, HISTORY_LIMIT, type FinishedResult, type GameRecord, type Opponent } from '../storage';
 
 let n = 0;
@@ -79,11 +79,44 @@ describe('addRecord', () => {
 });
 
 describe('tips', () => {
-  it('shuffles into a different order without losing any', () => {
-    const sequence = [0.1, 0.9, 0.3, 0.7, 0.5, 0.2, 0.8, 0.4, 0.6, 0.05, 0.95, 0.15, 0.85];
-    let i = 0;
-    const mixed = shuffled(TIPS, () => sequence[i++ % sequence.length]!);
-    expect(mixed).not.toEqual(TIPS);
-    expect([...mixed].sort()).toEqual([...TIPS].sort());
+  it('has ten different tips, stepped through in a loop', () => {
+    expect(TIPS).toHaveLength(10);
+    expect(new Set(TIPS).size).toBe(TIPS.length);
+    expect(nextTip(0)).toBe(1);
+    expect(nextTip(TIPS.length - 1)).toBe(0);
+  });
+});
+
+/** The tips that rest on a finer point of the rules, played out by the engine. */
+describe('tips hold under the rules', () => {
+  const sans = (board: Board): string[] => legalMoves(board).map((m) => m.san).sort();
+  const play = (board: Board, uci: string): void => {
+    board.make({ from: uci.slice(0, 2) as Square, to: uci.slice(2, 4) as Square });
+  };
+
+  it('back-rank trap: their only capture checkmates you, and you win', () => {
+    const board = new Board('4r1k1/5ppp/8/8/8/3N4/5PPP/6K1 w - - 0 1');
+    play(board, 'd3e1');
+    expect(sans(board)).toEqual(['Rxe1#']);
+    play(board, 'e8e1');
+    expect(getGameResult(board)).toEqual({ status: 'win', winner: 'w', reason: 'checkmated' });
+  });
+
+  it('en passant is a forced capture', () => {
+    const board = new Board('4k3/8/8/8/3p4/8/4P2P/4K3 w - - 0 1');
+    play(board, 'e2e4');
+    expect(sans(board)).toEqual(['dxe3']);
+  });
+
+  it('their king must take an unprotected piece next to it, but cannot take a protected one', () => {
+    expect(sans(new Board('4k3/3N3p/8/8/8/8/7P/4K3 b - - 0 1'))).toEqual(['Kxd7']);
+    // The b5 bishop protects d7.
+    const guarded = legalMoves(new Board('4k3/3N3p/8/1B6/8/8/7P/4K3 b - - 0 1'));
+    expect(guarded.some((m) => m.captured !== undefined)).toBe(false);
+  });
+
+  it('in check, the only captures allowed are ones that end the check', () => {
+    // axb4 is on offer, but the e5 rook gives check, so dxe5 is the only move.
+    expect(sans(new Board('4k3/8/3p4/p3R3/1P6/8/8/4K3 b - - 0 1'))).toEqual(['dxe5']);
   });
 });

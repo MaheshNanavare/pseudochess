@@ -63,6 +63,7 @@ export const DEFAULT_PREFERENCES: Preferences = { boardTheme: 'dusk', sound: tru
 const PREFS_KEY = 'pseudochess.prefs';
 const GAME_KEY = 'pseudochess.game';
 const HISTORY_KEY = 'pseudochess.history';
+const TIP_KEY = 'pseudochess.tip';
 const THEMES: BoardTheme[] = ['dusk', 'ocean', 'forest', 'desert', 'arctic'];
 const FLAGS = ['sound', 'music', 'hints', 'autoMove'] as const;
 
@@ -139,4 +140,14 @@ export function loadHistory(): GameRecord[] {
 
 export function recordGame(record: GameRecord): void {
   write(HISTORY_KEY, addRecord(loadHistory(), record));
+}
+
+/** Which tip the results page opens on, so each visit moves on to one not seen last time. */
+export function loadTipIndex(): number {
+  const saved = read<unknown>(TIP_KEY);
+  return typeof saved === 'number' && Number.isInteger(saved) && saved >= 0 ? saved : 0;
+}
+
+export function saveTipIndex(index: number): void {
+  write(TIP_KEY, index);
 }

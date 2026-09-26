@@ -1,13 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Difficulty } from '../../engine/types';
-import { LEVELS, outcomeFor, reasonText, shuffled, summarize, TIPS, winRate, type Tally } from '../stats';
-import { HISTORY_LIMIT, type GameRecord } from '../storage';
+import { LEVELS, nextTip, outcomeFor, reasonText, summarize, TIPS, winRate, type Tally } from '../stats';
+import { HISTORY_LIMIT, loadTipIndex, saveTipIndex, type GameRecord } from '../storage';
 import { COLOR_NAMES } from '../text';
 import { Button } from './Button';
 import { Wordmark } from './Wordmark';
-
-/** How many tips show at once; a fresh shuffle each visit. */
-const TIPS_SHOWN = 3;
 
 const LEVEL_NAMES: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
 
@@ -101,10 +98,11 @@ interface StatsScreenProps {
   audio: ReactNode;
 }
 
-/** Results of the last games, by computer level, with a few shuffled tips to win. */
+/** Results of the last games, by computer level, with one tip to win at a time. */
 export function StatsScreen({ history, onHome, audio }: StatsScreenProps) {
-  // A new order every time the page opens.
-  const [tips] = useState(() => shuffled(TIPS).slice(0, TIPS_SHOWN));
+  const [tip, setTip] = useState(() => loadTipIndex() % TIPS.length);
+  // The next visit opens on the tip after the last one seen here.
+  useEffect(() => saveTipIndex(nextTip(tip)), [tip]);
   const summary = summarize(history);
   const two = summary.twoPlayer;
   const twoGames = two.white + two.black + two.draw;
@@ -170,14 +168,26 @@ export function StatsScreen({ history, onHome, audio }: StatsScreenProps) {
             <h2 id="tips" className="text-xl font-extrabold [font-stretch:85%]">
               Tips to win
             </h2>
-            <ul className="mt-3 space-y-3">
-              {tips.map((tip) => (
-                <li key={tip} className="rounded-xl bg-surface p-4 leading-snug">
-                  {tip}
-                </li>
+            {/* Every tip shares one grid cell and all but the current one are invisible,
+                so the card is as tall as the longest tip and the button never moves. */}
+            <div className="mt-3 grid rounded-xl bg-surface p-4 leading-snug">
+              {TIPS.map((text) => (
+                <p key={text} aria-hidden="true" className="invisible col-start-1 row-start-1">
+                  {text}
+                </p>
               ))}
-            </ul>
-            <p className="mt-3 text-sm text-muted">New tips each time you open this page.</p>
+              <p aria-live="polite" className="col-start-1 row-start-1">
+                <span key={tip} className="block animate-enter">
+                  {TIPS[tip]}
+                </span>
+              </p>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-4">
+              <p className="text-sm text-muted tabular-nums">
+                Tip {tip + 1} of {TIPS.length}
+              </p>
+              <Button onClick={() => setTip(nextTip)}>Next tip</Button>
+            </div>
           </aside>
 
           {history.length > 0 && (

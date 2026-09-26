@@ -65,7 +65,7 @@ export default function App() {
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
   const [exitOpen, setExitOpen] = useState(false);
   const [history, setHistory] = useState(loadHistory);
-  /** Counts visits to the results page, so its tips reshuffle every time. */
+  /** Counts visits to the results page, so each visit opens on a new tip. */
   const [statsVisit, setStatsVisit] = useState(0);
   // The only legal move is played for you only while you can see the board.
   const boardInView = screen === 'game' && help === null && !newGameOpen && !settingsOpen;

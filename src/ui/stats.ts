@@ -60,32 +60,23 @@ export function reasonText(record: GameRecord): string {
 }
 
 /**
- * Ways to win at this variant. They follow the engine's own strategy
- * (Docs/pseudochess-spec.md, section 3), so they are advice it would give.
+ * Tactics for this variant, shown one at a time on the results page, most
+ * widely useful first. The ones that rest on a finer point of the rules
+ * (en passant, king captures, check, checkmate winning) are played out on
+ * real positions in the tests, so they stay true if the rules change.
  */
 export const TIPS: readonly string[] = [
-  'Give your pawns away first. They are slow and hard to put in danger, so leaving them until last makes the finish drag.',
-  'Keep your queen away from enemy pieces. Whenever she can capture she must, and every capture lightens your opponent’s load, not yours.',
-  'Long-range pieces are a liability. A rook or bishop on an open line can be forced into capture after capture.',
-  'Before you move, look at what you will be able to take next turn. A careless move can hand you a forced capture you do not want.',
-  'Put pieces where they can be taken. A piece sitting in front of an enemy pawn is a piece you are about to lose, which is what you want.',
+  'Only give away pieces that none of yours protect. If one of your pieces covers the square, you will be forced to take back, and your gift becomes a trade.',
+  'Forced to capture? Pick the capture that lands your piece where they can take it back. They must recapture, so you lose a piece in return for the one you took.',
+  'Push a pawn to where it and an enemy pawn attack each other. It looks like a threat, but they move next, so they are the ones forced to capture.',
   'Knights are easy to give away: jump them next to enemy pieces. They reach squares other pieces cannot, so the opponent often has to take.',
-  'Do not checkmate your opponent. Delivering checkmate loses; getting your own king checkmated wins.',
-  'Walk your king out late in the game. An exposed king is closer to being checkmated, which is a win for you.',
-  'When your opponent is down to two or three pieces, stop threatening them. Capturing their last pieces hands them the win.',
-  'Promote to a knight or a bishop. A new queen is one more long-range piece you will be forced to capture with.',
-  'Force chains: offer a piece where taking it leaves the capturing piece exposed to one of yours. The opponent must take, and you set up the next gift.',
-  'Count the rack under each board. It shows exactly how many pieces each side still has to lose.',
-  'If you are behind, steer for a draw: repeating the position three times, or 50 moves with no capture and no pawn move, ends the game level.',
-  'The gold outlines show which of your pieces must capture. When there is a choice, pick the capture that leaves your piece most exposed afterwards.',
+  'Chain your gifts: give a piece away where the capturing piece will land attacking another of yours. They have to capture again next turn, so one offer loses you two pieces.',
+  'Their king has to capture too. Put a piece next to it that none of yours protect, and the king must take it. It cannot take a protected one, as that would walk into check.',
+  'To get rid of one particular piece, such as your queen, give check with it from a square they can capture. In check, the only captures allowed are ones that end the check, so they have to take it.',
+  'En passant is a capture, so it is forced too. Push a pawn two squares so it lands right beside an enemy pawn, and they have to take it en passant.',
+  'Back-rank trap: with your king boxed in behind its pawns, leave a piece on your back rank where their rook or queen can take it. If that is their only capture, taking it is forced, and it checkmates you: you win.',
+  'When you promote, choose the piece that attacks none of theirs. A new queen often hits several pieces at once, and if they cannot take her straight away, you will be the one forced to capture.',
 ];
 
-/** A shuffled copy (Fisher-Yates). `random` is injectable for tests. */
-export function shuffled<T>(items: readonly T[], random: () => number = Math.random): T[] {
-  const out = [...items];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [out[i], out[j]] = [out[j]!, out[i]!];
-  }
-  return out;
-}
+/** The tip after `index`, back to the first after the last. */
+export const nextTip = (index: number): number => (index + 1) % TIPS.length;
