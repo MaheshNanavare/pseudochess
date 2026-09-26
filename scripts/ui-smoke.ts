@@ -235,6 +235,48 @@ async function checkDrawsAutoMoveAndMusic(): Promise<void> {
   // The end scene plays first (about 3 s), then the result dialog opens.
   await page.getByRole('heading', { name: 'Draw' }).waitFor({ timeout: 6000 });
   check(true, 'two players: an accepted offer ends the game in a draw, after the end scene');
+  await page.getByRole('dialog').getByRole('button', { name: 'Home', exact: true }).click();
+  check(await page.getByRole('heading', { name: 'New game' }).isVisible(), 'the result dialog has a way home');
+  await context.close();
+}
+
+/** Leaving a game (keep or resign), and the results page with its shuffled tips. */
+async function checkExitAndResults(): Promise<void> {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await context.addInitScript(() => localStorage.setItem('pseudochess.helpSeen', '1'));
+  const page = await context.newPage();
+  page.on('pageerror', (err) => errors.push(`[results] ${err.message}`));
+  await page.goto(url);
+  await page.waitForLoadState('networkidle');
+
+  await page.getByRole('button', { name: 'Your results' }).click();
+  check((await page.locator('main').textContent())?.includes('No finished games yet') ?? false, 'results page explains when there are no games');
+  const tips = async () => (await page.getByRole('complementary').locator('li').allTextContents()).join('|');
+  const firstTips = await tips();
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Start new game' }).click();
+  await clickSquare(page, 'e2');
+  await clickSquare(page, 'e4');
+  await waitForPlayerTurn(page);
+  await page.getByRole('button', { name: 'Exit game' }).click();
+  const exit = page.getByRole('dialog', { name: 'Leave this game?' });
+  await exit.getByRole('button', { name: 'Keep and go home' }).click();
+  check(await page.getByRole('button', { name: /Continue game/ }).isVisible(), 'keeping a game on exit offers to continue it');
+
+  await page.getByRole('button', { name: /Continue game/ }).click();
+  await page.getByRole('button', { name: 'Exit game' }).click();
+  await exit.getByRole('button', { name: 'Resign' }).click();
+  check(!(await page.getByRole('button', { name: /Continue game/ }).isVisible()), 'resigning ends the game');
+
+  await page.getByRole('button', { name: 'Your results' }).click();
+  const main = (await page.locator('main').textContent()) ?? '';
+  check(main.includes('Loss') && main.includes('Resigned') && main.includes('1 game'), 'the resigned game is recorded as a loss');
+  await page.screenshot({ path: `${outDir}/results.png`, fullPage: true });
+  const reshuffled = (await tips()) !== firstTips;
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await page.getByRole('button', { name: 'Your results' }).click();
+  check(reshuffled || (await tips()) !== firstTips, 'tips reshuffle on each visit');
   await context.close();
 }
 
@@ -281,6 +323,7 @@ try {
   await checkInteractions();
   await checkTwoPlayerAndForcedNote();
   await checkDrawsAutoMoveAndMusic();
+  await checkExitAndResults();
 } finally {
   await browser.close();
 }

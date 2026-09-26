@@ -1,4 +1,4 @@
-import type { Color, GameResult, Move, PieceType } from '../engine/types';
+import { opponentOf, type Color, type GameResult, type Move, type PieceType } from '../engine/types';
 
 export const PIECE_NAMES: Record<PieceType, string> = {
   p: 'pawn',
@@ -47,10 +47,16 @@ export function describeResult(result: GameResult, player: Color | null): Result
   }
   if (player === null) {
     const winner = COLOR_NAMES[result.winner];
-    const detail = result.reason === 'checkmated' ? `${winner}'s king was checkmated.` : `${winner} lost every piece except the king.`;
+    const detail = {
+      checkmated: `${winner}'s king was checkmated.`,
+      'bare-king': `${winner} lost every piece except the king.`,
+      resigned: `${COLOR_NAMES[opponentOf(result.winner)]} resigned.`,
+    }[result.reason];
     return { outcome: 'win', title: `${winner} wins`, detail };
   }
   const playerWon = result.winner === player;
+  // Only the person resigns; the computer plays on.
+  if (result.reason === 'resigned') return { outcome: 'loss', title: 'You lose', detail: 'You resigned.' };
   if (result.reason === 'checkmated') {
     return playerWon
       ? { outcome: 'win', title: 'You win', detail: 'Your king was checkmated.' }

@@ -20,6 +20,7 @@ interface HomeProps {
   onStart: (settings: GameSettings) => void;
   onHelp: () => void;
   onSettings: () => void;
+  onResults: () => void;
   /** Quick audio controls, in the top-right corner. */
   audio: ReactNode;
 }
@@ -30,7 +31,7 @@ function describeInProgress(game: GameInProgress): string {
 }
 
 /** The screen the app opens on: what the game is, a way back into a saved game, and a new game. */
-export function Home({ inProgress, initial, onContinue, onStart, onHelp, onSettings, audio }: HomeProps) {
+export function Home({ inProgress, initial, onContinue, onStart, onHelp, onSettings, onResults, audio }: HomeProps) {
   const [draft, setDraft] = useState<SetupDraft>(() => draftFrom(initial));
   const [animate] = useState(() => !landingPlayed);
 
@@ -75,9 +76,12 @@ export function Home({ inProgress, initial, onContinue, onStart, onHelp, onSetti
           </Button>
         </section>
 
-        <nav aria-label="More" className="mt-6 flex gap-1 border-t border-line pt-3">
+        <nav aria-label="More" className="mt-6 flex flex-wrap gap-1 border-t border-line pt-3">
           <Button variant="ghost" onClick={onHelp} className="-ml-2">
             How to play
+          </Button>
+          <Button variant="ghost" onClick={onResults}>
+            Your results
           </Button>
           <Button variant="ghost" onClick={onSettings}>
             Settings

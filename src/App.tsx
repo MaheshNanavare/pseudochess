@@ -4,6 +4,7 @@ import { AudioToggles } from './ui/components/AudioToggles';
 import { Board } from './ui/components/Board';
 import { Button } from './ui/components/Button';
 import { DrawOfferDialog } from './ui/components/DrawOfferDialog';
+import { ExitGameDialog } from './ui/components/ExitGameDialog';
 import { GameNotice } from './ui/components/GameNotice';
 import { GameOverDialog } from './ui/components/GameOverDialog';
 import { Home, type GameInProgress } from './ui/components/Home';
@@ -14,18 +15,19 @@ import { PlayerStrip } from './ui/components/PlayerStrip';
 import { PromotionPicker } from './ui/components/PromotionPicker';
 import { ResultScene, type SceneCast } from './ui/components/ResultScene';
 import { SettingsDialog } from './ui/components/SettingsDialog';
+import { StatsScreen } from './ui/components/StatsScreen';
 import { StatusLine } from './ui/components/StatusLine';
 import { Wordmark } from './ui/components/Wordmark';
 import { useGame, type GameSnapshot } from './ui/hooks/useGame';
 import { music } from './ui/music';
 import { atLeast, heldPieces, shedPieces } from './ui/resultPieces';
 import { playCapture, playMove, playSound } from './ui/sound';
-import { loadGame, loadPreferences, savePreferences, type GameSettings, type Preferences } from './ui/storage';
+import { loadGame, loadHistory, loadPreferences, savePreferences, type GameSettings, type Preferences } from './ui/storage';
 import { COLOR_NAMES, describeMove, describeResult, type ResultText } from './ui/text';
 
 const HELP_SEEN_KEY = 'pseudochess.helpSeen';
 
-type Screen = 'home' | 'game';
+type Screen = 'home' | 'game' | 'stats';
 /** Why the rules are showing: automatically before a first game, or because the player asked. */
 type HelpMode = 'intro' | 'asked';
 
@@ -61,6 +63,10 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [prefs, setPrefs] = useState<Preferences>(loadPreferences);
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+  const [exitOpen, setExitOpen] = useState(false);
+  const [history, setHistory] = useState(loadHistory);
+  /** Counts visits to the results page, so its tips reshuffle every time. */
+  const [statsVisit, setStatsVisit] = useState(0);
   // The only legal move is played for you only while you can see the board.
   const boardInView = screen === 'game' && help === null && !newGameOpen && !settingsOpen;
   const game = useGame(
@@ -97,7 +103,7 @@ export default function App() {
   }, [prefs]);
 
   useEffect(() => music.setEnabled(prefs.music), [prefs.music]);
-  useEffect(() => music.setTrack(screen), [screen]);
+  useEffect(() => music.setTrack(screen === 'game' ? 'game' : 'home'), [screen]);
 
   // Sounds for new moves and for the end of the game (not for undo or loading a saved game).
   const heardMoves = useRef(snapshot.history.length);
@@ -147,6 +153,34 @@ export default function App() {
     if (accept && prefs.sound) playSound('draw');
   };
 
+  const openStats = () => {
+    setHistory(loadHistory());
+    setStatsVisit((v) => v + 1);
+    setScreen('stats');
+  };
+
+  const goHome = () => {
+    setExitOpen(false);
+    setScreen('home');
+  };
+
+  /** Leaving from the game screen: a game in progress asks whether to keep or resign it. */
+  const exitGame = () => {
+    if (ongoing && snapshot.history.length > 0) setExitOpen(true);
+    else goHome();
+  };
+
+  const resignAndLeave = () => {
+    game.resign();
+    goHome();
+  };
+
+  /** From the result dialog: close it for good and go home. */
+  const homeFromResult = () => {
+    setDismissedAt(snapshot.history.length);
+    goHome();
+  };
+
   const dialogs = (
     <>
       <HowToPlay open={help !== null} onClose={closeHelp} actionLabel={help === 'intro' ? 'Start playing' : 'Close'} />
@@ -164,10 +198,22 @@ export default function App() {
           onStart={startGame}
           onHelp={() => setHelp('asked')}
           onSettings={() => setSettingsOpen(true)}
+          onResults={openStats}
           audio={<AudioToggles prefs={prefs} onChange={setPrefs} showSound={false} />}
         />
         {dialogs}
       </>
+    );
+  }
+
+  if (screen === 'stats') {
+    return (
+      <StatsScreen
+        key={statsVisit}
+        history={history}
+        onHome={() => setScreen('home')}
+        audio={<AudioToggles prefs={prefs} onChange={setPrefs} showSound={false} />}
+      />
     );
   }
 
@@ -268,6 +314,13 @@ export default function App() {
                   Play again
                 </Button>
               )}
+              <Button onClick={exitGame}>
+                <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 4H4v12h4" />
+                  <path d="M12 6l4 4-4 4M16 10H8" />
+                </svg>
+                Exit game
+              </Button>
             </div>
             <div className="border-t border-line pt-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
               <MoveHistory moves={snapshot.history} />
@@ -278,6 +331,13 @@ export default function App() {
 
       <PromotionPicker open={game.pendingPromotion !== null} color={snapshot.turn} onChoose={game.choosePromotion} />
       <DrawOfferDialog offeredBy={game.drawOffer} onAnswer={answerDraw} />
+      <ExitGameDialog
+        open={exitOpen}
+        mover={game.twoPlayer ? COLOR_NAMES[snapshot.turn] : null}
+        onKeep={goHome}
+        onResign={resignAndLeave}
+        onCancel={() => setExitOpen(false)}
+      />
       <NewGameDialog
         key={newGameOpen ? 'open' : 'closed'}
         open={newGameOpen}
@@ -291,6 +351,7 @@ export default function App() {
         open={gameOverOpen && help === null && !sceneOpen}
         onClose={() => setDismissedAt(snapshot.history.length)}
         onPlayAgain={() => game.newGame()}
+        onHome={homeFromResult}
       />
       {dialogs}
     </div>

@@ -12,9 +12,10 @@ import {
   type Piece,
   type PromotionPiece,
   type Square,
+  opponentOf,
 } from '../../engine/types';
 import { explainForcedCapture, type Attempt } from '../forcedCapture';
-import { saveGame, type GameSettings, type SavedGame } from '../storage';
+import { newGameId, recordGame, saveGame, type GameSettings, type SavedGame } from '../storage';
 import { AICancelledError, useAI } from './useAI';
 
 export interface GameSnapshot {
@@ -46,7 +47,13 @@ export type DrawOfferOutcome = 'accepted' | 'declined' | 'asked';
 
 const AGREED_DRAW: GameResult = { status: 'draw', reason: 'agreement' };
 
-function takeSnapshot(board: Board, drawAgreed: boolean): GameSnapshot {
+/** A result the players decided rather than the position: a resignation or an agreed draw. */
+function decidedResult(drawAgreed: boolean, resignedBy: Color | null): GameResult | null {
+  if (resignedBy) return { status: 'win', winner: opponentOf(resignedBy), reason: 'resigned' };
+  return drawAgreed ? AGREED_DRAW : null;
+}
+
+function takeSnapshot(board: Board, decided: GameResult | null): GameSnapshot {
   const legal = legalMoves(board);
   const turn = board.sideToMove();
   const pieces = board.pieces();
@@ -57,7 +64,7 @@ function takeSnapshot(board: Board, drawAgreed: boolean): GameSnapshot {
     legal,
     forced,
     normal: forced ? board.allLegalMoves() : legal,
-    result: drawAgreed ? AGREED_DRAW : getGameResult(board),
+    result: decided ?? getGameResult(board),
     history: board.history(),
     inCheck: board.inCheck(),
     kingSquare: pieces.find((p) => p.type === 'k' && p.color === turn)?.square,
@@ -83,7 +90,7 @@ function restoreBoard(moves: MoveInput[]): Board {
   }
 }
 
-type SavedPlay = Pick<SavedGame, 'moves' | 'drawAgreed'>;
+type SavedPlay = Pick<SavedGame, 'id' | 'moves' | 'drawAgreed' | 'resignedBy'>;
 
 /**
  * @param autoMove Play the only legal move for the person to move. Pass false
@@ -97,7 +104,9 @@ export function useGame(initial: GameSettings, saved: SavedPlay | null, autoMove
   const [selected, setSelected] = useState<Square | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: Square; to: Square } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [gameId, setGameId] = useState(() => saved?.id ?? newGameId());
   const [drawAgreed, setDrawAgreed] = useState(saved?.drawAgreed === true && saved.moves.length > 0);
+  const [resignedBy, setResignedBy] = useState<Color | null>(saved?.resignedBy ?? null);
   /** Two players: the colour whose draw offer is waiting for an answer. */
   const [drawOffer, setDrawOffer] = useState<Color | null>(null);
   /** History length at the last declined offer; no new offer until a move is played. */
@@ -107,7 +116,7 @@ export function useGame(initial: GameSettings, saved: SavedPlay | null, autoMove
   const { thinking, requestMove, cancel } = useAI();
 
   // `version` is the change signal for the mutable board in boardRef.
-  const snapshot = useMemo(() => takeSnapshot(boardRef.current, drawAgreed), [version, drawAgreed]);
+  const snapshot = useMemo(() => takeSnapshot(boardRef.current, decidedResult(drawAgreed, resignedBy)), [version, drawAgreed, resignedBy]);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
   const twoPlayer = settings.opponent === 'human';
@@ -116,8 +125,15 @@ export function useGame(initial: GameSettings, saved: SavedPlay | null, autoMove
 
   // Remember the game so closing the app does not lose it.
   useEffect(() => {
-    saveGame({ ...settings, moves: snapshot.history.map(toInput), drawAgreed });
-  }, [snapshot, settings, drawAgreed]);
+    saveGame({ ...settings, id: gameId, moves: snapshot.history.map(toInput), drawAgreed, resignedBy });
+  }, [snapshot, settings, gameId, drawAgreed, resignedBy]);
+
+  // Add each finished game to the results history (once per game; addRecord ignores repeats).
+  useEffect(() => {
+    const result = snapshot.result;
+    if (result.status === 'ongoing') return;
+    recordGame({ ...settings, id: gameId, endedAt: Date.now(), result, plies: snapshot.history.length });
+  }, [snapshot, settings, gameId]);
 
   // AI reply whenever it is the AI's turn.
   useEffect(() => {
@@ -300,7 +316,9 @@ export function useGame(initial: GameSettings, saved: SavedPlay | null, autoMove
       cancel();
       boardRef.current = new Board();
       setSettings((s) => ({ ...s, ...next }));
+      setGameId(newGameId());
       setDrawAgreed(false);
+      setResignedBy(null);
       setDeclinedAt(null);
       setUndoneAt(null);
       resetTransient();
@@ -315,7 +333,7 @@ export function useGame(initial: GameSettings, saved: SavedPlay | null, autoMove
 
   const canUndo = twoPlayer ? snapshot.history.length > 0 : snapshot.history.some((m) => m.color === settings.playerColor);
 
-  /** Take back the last move (and a draw agreed after it). Against the computer: the player's last move and the reply after it. */
+  /** Take back the last move (and an agreed draw or resignation after it). Against the computer: the player's last move and the reply after it. */
   const undo = useCallback(() => {
     if (!canUndo) return;
     cancel();
@@ -327,10 +345,19 @@ export function useGame(initial: GameSettings, saved: SavedPlay | null, autoMove
       }
     }
     setDrawAgreed(false);
+    setResignedBy(null);
     setUndoneAt(board.history().length);
     resetTransient();
     bump();
   }, [canUndo, cancel, twoPlayer, settings.playerColor, resetTransient, bump]);
+
+  /** Gives up the game: the person against the computer, or the side to move between two players. */
+  const resign = useCallback(() => {
+    if (!ongoing) return;
+    cancel();
+    resetTransient();
+    setResignedBy(twoPlayer ? snapshot.turn : settings.playerColor);
+  }, [ongoing, cancel, resetTransient, twoPlayer, snapshot.turn, settings.playerColor]);
 
   const lastMove = snapshot.history.at(-1);
 
@@ -353,6 +380,7 @@ export function useGame(initial: GameSettings, saved: SavedPlay | null, autoMove
     drawOffer,
     offerDraw,
     answerDraw,
+    resign,
     onSquareClick,
     tryMove,
     select,

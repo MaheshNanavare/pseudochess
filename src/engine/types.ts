@@ -27,7 +27,8 @@ export interface Move extends MoveInput {
   san: string;
 }
 
-export type WinReason = 'checkmated' | 'bare-king';
+/** 'resigned' never comes from the position: the other side gave up. */
+export type WinReason = 'checkmated' | 'bare-king' | 'resigned';
 /** 'agreement' never comes from the position: the players (or the computer) agreed to it. */
 export type DrawReason = 'stalemate' | 'threefold-repetition' | 'fifty-move-rule' | 'bare-kings' | 'agreement';
 

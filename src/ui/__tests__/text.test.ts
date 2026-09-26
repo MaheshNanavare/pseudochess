@@ -44,3 +44,13 @@ describe('describeResult', () => {
     expect(describeResult({ status: 'draw', reason: 'agreement' }, null)?.detail).toBe('Both players agreed to a draw.');
   });
 });
+
+describe('describeResult: resignation', () => {
+  it('is a loss for the person who resigned against the computer', () => {
+    expect(describeResult({ status: 'win', winner: 'b', reason: 'resigned' }, 'w')).toEqual({ outcome: 'loss', title: 'You lose', detail: 'You resigned.' });
+  });
+
+  it('names who resigned in a two-player game', () => {
+    expect(describeResult({ status: 'win', winner: 'w', reason: 'resigned' }, null)).toEqual({ outcome: 'win', title: 'White wins', detail: 'Black resigned.' });
+  });
+});

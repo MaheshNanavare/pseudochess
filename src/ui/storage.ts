@@ -1,4 +1,4 @@
-import type { Color, Difficulty, MoveInput } from '../engine/types';
+import type { Color, Difficulty, GameResult, MoveInput } from '../engine/types';
 
 /*
  * Local persistence. Every read and write is guarded: storage can be missing
@@ -29,15 +29,40 @@ export interface GameSettings {
 }
 
 export interface SavedGame extends GameSettings {
+  /** Identifies the game in the results history, so it is recorded once. */
+  id: string;
   moves: MoveInput[];
   /** The game ended in a draw by agreement after these moves. */
   drawAgreed: boolean;
+  /** The colour that resigned, ending the game. */
+  resignedBy: Color | null;
 }
+
+export type FinishedResult = Exclude<GameResult, { status: 'ongoing' }>;
+
+/** One finished game in the results history. */
+export interface GameRecord {
+  id: string;
+  /** When it ended, in milliseconds since 1970. */
+  endedAt: number;
+  opponent: Opponent;
+  difficulty: Difficulty;
+  playerColor: Color;
+  result: FinishedResult;
+  /** Half-moves played. */
+  plies: number;
+}
+
+/** How many finished games the history keeps; older ones drop off. */
+export const HISTORY_LIMIT = 100;
+
+export const newGameId = (): string => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 export const DEFAULT_PREFERENCES: Preferences = { boardTheme: 'dusk', sound: true, music: true, hints: true, autoMove: false };
 
 const PREFS_KEY = 'pseudochess.prefs';
 const GAME_KEY = 'pseudochess.game';
+const HISTORY_KEY = 'pseudochess.history';
 const THEMES: BoardTheme[] = ['dusk', 'ocean', 'forest', 'desert', 'arctic'];
 const FLAGS = ['sound', 'music', 'hints', 'autoMove'] as const;
 
@@ -84,9 +109,34 @@ export function loadGame(): SavedGame | null {
     // Games saved before two-player mode and draw offers existed were ongoing computer games.
     opponent: saved.opponent === 'human' ? 'human' : 'computer',
     drawAgreed: saved.drawAgreed === true,
+    id: typeof saved.id === 'string' ? saved.id : newGameId(),
+    resignedBy: saved.resignedBy === 'w' || saved.resignedBy === 'b' ? saved.resignedBy : null,
   };
 }
 
 export function saveGame(game: SavedGame): void {
   write(GAME_KEY, game);
+}
+
+/**
+ * Adds a finished game to the front of the history, newest first. A game is
+ * recorded once: its first result stands, even if moves are taken back and
+ * it ends differently. Only the latest HISTORY_LIMIT games are kept.
+ */
+export function addRecord(history: GameRecord[], record: GameRecord): GameRecord[] {
+  if (history.some((r) => r.id === record.id)) return history;
+  return [record, ...history].slice(0, HISTORY_LIMIT);
+}
+
+export function loadHistory(): GameRecord[] {
+  const saved = read<unknown>(HISTORY_KEY);
+  if (!Array.isArray(saved)) return [];
+  return saved.filter(
+    (r): r is GameRecord =>
+      typeof r === 'object' && r !== null && typeof (r as GameRecord).id === 'string' && typeof (r as GameRecord).endedAt === 'number' && typeof (r as GameRecord).result === 'object',
+  );
+}
+
+export function recordGame(record: GameRecord): void {
+  write(HISTORY_KEY, addRecord(loadHistory(), record));
 }

@@ -20,7 +20,8 @@ Same as normal chess: same board, same pieces, same starting position, same piec
 
 ### How you lose
 1. You checkmate the opponent's king, or
-2. Your opponent is reduced to only their king.
+2. Your opponent is reduced to only their king, or
+3. You resign ("Exit game", then "Resign"). The computer never resigns.
 
 ### Check
 - Normal chess rules: a player in check must get out of check (move the king, block, or capture the checking piece).
