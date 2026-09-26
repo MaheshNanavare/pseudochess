@@ -54,7 +54,7 @@ The visual language behind the icon and hero art is described in `store-assets/p
 
 ## 3. Submission steps
 
-1. **Deploy the PWA** over HTTPS (build plan phase 7: Vercel, subdomain `pseudochess.maheshnanavare.co.uk`). Confirm the site installs from Edge and works offline.
+1. **Deploy the PWA** over HTTPS. GitHub Pages builds and publishes it on every push to `master` (`.github/workflows/deploy.yml`), at `pseudochess.maheshnanavare.co.uk` (set in `public/CNAME`). One-time setup: repo Settings > Pages > Source: GitHub Actions; a DNS CNAME record `pseudochess` → `maheshnanavare.github.io`; then tick Enforce HTTPS. Confirm the site installs from Edge and works offline.
 2. **Register** as an individual developer at https://storedeveloper.microsoft.com (free, ID verification).
 3. **Reserve the name** "PseudoChess" in Partner Center (Apps and games > New product > MSIX or PWA app).
 4. From Partner Center > Product identity, copy **Package ID**, **Publisher ID** and **Publisher display name**.
