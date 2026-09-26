@@ -203,6 +203,20 @@ async function checkDrawsAutoMoveAndMusic(): Promise<void> {
   await page.waitForTimeout(1500);
   check(audio.includes('/audio/game.mp3'), 'game music plays on the game screen');
 
+  // Quick mute buttons beside the game controls, remembered in preferences.
+  const prefs = () => page.evaluate(() => JSON.parse(localStorage.getItem('pseudochess.prefs') ?? '{}') as { music?: boolean; sound?: boolean });
+  const musicButton = page.getByRole('button', { name: 'Music', exact: true });
+  const soundButton = page.getByRole('button', { name: 'Sound effects', exact: true });
+  await musicButton.click();
+  await soundButton.click();
+  const muted = await prefs();
+  check(muted.music === false && muted.sound === false && (await musicButton.getAttribute('aria-pressed')) === 'false', 'music and sound effects mute from the game screen');
+  await page.getByRole('button', { name: 'Home' }).click();
+  await page.getByRole('button', { name: 'Music', exact: true }).click();
+  check((await prefs()).music === true, 'music unmutes from the home screen');
+  await page.getByRole('button', { name: 'Start new game' }).click(); // no moves yet, so no Continue
+  await soundButton.click();
+
   // Two players: after 1.e4 d5 the only legal move, exd5, is played automatically.
   await page.getByRole('button', { name: 'New game', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'New game' });
@@ -218,7 +232,9 @@ async function checkDrawsAutoMoveAndMusic(): Promise<void> {
 
   await page.getByRole('button', { name: 'Offer draw' }).click();
   await page.getByRole('dialog', { name: 'White offers a draw' }).getByRole('button', { name: 'Accept draw' }).click();
-  check(await page.getByRole('heading', { name: 'Draw' }).isVisible(), 'two players: an accepted offer ends the game in a draw');
+  // The end scene plays first (about 3 s), then the result dialog opens.
+  await page.getByRole('heading', { name: 'Draw' }).waitFor({ timeout: 6000 });
+  check(true, 'two players: an accepted offer ends the game in a draw, after the end scene');
   await context.close();
 }
 

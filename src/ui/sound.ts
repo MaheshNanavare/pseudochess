@@ -1,18 +1,18 @@
 /**
- * Small synthesised sound effects (no audio files, so they work offline and
+ * Sound effects, all synthesised (no audio files, so they work offline and
  * add nothing to the download). The context is created on first use, which
  * always follows a user gesture in this app.
+ *
+ * Piece moves and captures are wooden sounds from pieceSounds.ts; check and
+ * the end-of-game cues are short tones, meant to stand apart from the wood.
  */
 import type { PieceType } from '../engine/types';
-import { captureSoundFor, renderCaptureSound, type CaptureSound } from './captureSounds';
+import { captureSize, PLAYBACK_GAIN, renderPieceSound, VARIANTS, type PieceSound } from './pieceSounds';
 
-export type SoundKind = 'move' | 'check' | 'win' | 'loss' | 'draw';
-
-/** Capture sounds are rendered at -3 dB; this brings them in just above the move click. */
-const CAPTURE_GAIN = 0.45;
+export type SoundKind = 'check' | 'win' | 'loss' | 'draw';
 
 let context: AudioContext | null = null;
-const captureBuffers = new Map<CaptureSound, AudioBuffer>();
+const pieceBuffers = new Map<PieceSound, AudioBuffer[]>();
 
 function audio(): AudioContext | null {
   try {
@@ -42,9 +42,6 @@ export function playSound(kind: SoundKind): void {
   if (!ctx) return;
   const t = ctx.currentTime;
   switch (kind) {
-    case 'move':
-      tone(ctx, 520, t, 0.07, 'triangle', 0.18);
-      break;
     case 'check':
       tone(ctx, 880, t, 0.12, 'sine', 0.16);
       tone(ctx, 660, t + 0.09, 0.14, 'sine', 0.12);
@@ -62,26 +59,40 @@ export function playSound(kind: SoundKind): void {
   }
 }
 
-/** Rendered once per sound, on first use. */
-function captureBuffer(ctx: AudioContext, kind: CaptureSound): AudioBuffer {
-  let buffer = captureBuffers.get(kind);
-  if (!buffer) {
-    const samples = renderCaptureSound(kind, ctx.sampleRate);
-    buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
-    buffer.copyToChannel(samples, 0);
-    captureBuffers.set(kind, buffer);
+/** All variants of a piece sound, rendered once on first use. */
+function variants(ctx: AudioContext, sound: PieceSound): AudioBuffer[] {
+  let buffers = pieceBuffers.get(sound);
+  if (!buffers) {
+    buffers = Array.from({ length: VARIANTS }, (_, v) => {
+      const samples = renderPieceSound(sound, v, ctx.sampleRate);
+      const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
+      buffer.copyToChannel(samples, 0);
+      return buffer;
+    });
+    pieceBuffers.set(sound, buffers);
   }
-  return buffer;
+  return buffers;
 }
 
-/** The capture sound for the piece that was taken. */
-export function playCapture(captured: PieceType): void {
+/** A random variant at a slightly random speed, so no two moves sound identical. */
+function playPiece(sound: PieceSound): void {
   const ctx = audio();
   if (!ctx) return;
+  const buffers = variants(ctx, sound);
   const source = ctx.createBufferSource();
   const gain = ctx.createGain();
-  source.buffer = captureBuffer(ctx, captureSoundFor(captured));
-  gain.gain.value = CAPTURE_GAIN;
+  source.buffer = buffers[Math.floor(Math.random() * buffers.length)]!;
+  source.playbackRate.value = 0.97 + Math.random() * 0.06;
+  gain.gain.value = PLAYBACK_GAIN[sound];
   source.connect(gain).connect(ctx.destination);
   source.start();
+}
+
+export function playMove(): void {
+  playPiece('move');
+}
+
+/** The capture sound for the piece that was taken: heavier for bigger pieces. */
+export function playCapture(captured: PieceType): void {
+  playPiece(`capture-${captureSize(captured)}`);
 }

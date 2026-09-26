@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { GameSettings } from '../storage';
 import { COLOR_NAMES } from '../text';
 import { Button } from './Button';
@@ -20,6 +20,8 @@ interface HomeProps {
   onStart: (settings: GameSettings) => void;
   onHelp: () => void;
   onSettings: () => void;
+  /** Quick audio controls, in the top-right corner. */
+  audio: ReactNode;
 }
 
 function describeInProgress(game: GameInProgress): string {
@@ -28,7 +30,7 @@ function describeInProgress(game: GameInProgress): string {
 }
 
 /** The screen the app opens on: what the game is, a way back into a saved game, and a new game. */
-export function Home({ inProgress, initial, onContinue, onStart, onHelp, onSettings }: HomeProps) {
+export function Home({ inProgress, initial, onContinue, onStart, onHelp, onSettings, audio }: HomeProps) {
   const [draft, setDraft] = useState<SetupDraft>(() => draftFrom(initial));
   const [animate] = useState(() => !landingPlayed);
 
@@ -37,7 +39,9 @@ export function Home({ inProgress, initial, onContinue, onStart, onHelp, onSetti
   }, []);
 
   return (
-    <main className="mx-auto grid min-h-dvh max-w-6xl content-center gap-x-16 gap-y-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,25rem)_minmax(0,1fr)] lg:py-10">
+    <main className="relative mx-auto grid min-h-dvh max-w-6xl content-center gap-x-16 gap-y-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,25rem)_minmax(0,1fr)] lg:py-10">
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6">{audio}</div>
+
       <div className="w-full max-w-[25rem] lg:self-end">
         <h1>
           <Wordmark size="lg" animate={animate} />

@@ -16,7 +16,8 @@
     "bench": "tsx scripts/bench.ts",
     "selfplay": "tsx scripts/selfplay.ts",
     "tune": "tsx scripts/tune.ts",
-    "screenshots": "tsx scripts/capture-screenshots.ts"
+    "screenshots": "tsx scripts/capture-screenshots.ts",
+    "sfx:preview": "tsx .claude/skills/game-sound-design/scripts/sfx-preview.ts src/ui/pieceSounds.ts test-results/sfx"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",

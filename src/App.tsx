@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { opponentOf, type Color } from './engine/types';
+import { AudioToggles } from './ui/components/AudioToggles';
 import { Board } from './ui/components/Board';
 import { Button } from './ui/components/Button';
 import { DrawOfferDialog } from './ui/components/DrawOfferDialog';
@@ -11,14 +12,16 @@ import { MoveHistory } from './ui/components/MoveHistory';
 import { NewGameDialog } from './ui/components/NewGameDialog';
 import { PlayerStrip } from './ui/components/PlayerStrip';
 import { PromotionPicker } from './ui/components/PromotionPicker';
+import { ResultScene, type SceneCast } from './ui/components/ResultScene';
 import { SettingsDialog } from './ui/components/SettingsDialog';
 import { StatusLine } from './ui/components/StatusLine';
 import { Wordmark } from './ui/components/Wordmark';
-import { useGame } from './ui/hooks/useGame';
+import { useGame, type GameSnapshot } from './ui/hooks/useGame';
 import { music } from './ui/music';
-import { playCapture, playSound } from './ui/sound';
+import { atLeast, heldPieces, shedPieces } from './ui/resultPieces';
+import { playCapture, playMove, playSound } from './ui/sound';
 import { loadGame, loadPreferences, savePreferences, type GameSettings, type Preferences } from './ui/storage';
-import { COLOR_NAMES, describeMove, describeResult } from './ui/text';
+import { COLOR_NAMES, describeMove, describeResult, type ResultText } from './ui/text';
 
 const HELP_SEEN_KEY = 'pseudochess.helpSeen';
 
@@ -40,6 +43,14 @@ function writeHelpSeen(): void {
   } catch {
     // storage unavailable: the help simply shows again next time
   }
+}
+
+/** Who the end scene shows: the winner's shed pieces rising, or your held pieces falling. */
+function sceneCast(snapshot: GameSnapshot, result: ResultText, player: Color): SceneCast {
+  if (snapshot.result.status !== 'win') return { color: player, pieces: [] };
+  if (result.outcome === 'loss') return { color: player, pieces: atLeast(heldPieces(snapshot.pieces, player), 8, 'p') };
+  const winner = snapshot.result.winner;
+  return { color: winner, pieces: atLeast(shedPieces(snapshot.history, winner), 10, 'p') };
 }
 
 export default function App() {
@@ -69,6 +80,12 @@ export default function App() {
   const resultText = describeResult(snapshot.result, perspective);
   const gameOverOpen = resultText !== null && dismissedAt !== snapshot.history.length;
 
+  // The end-of-game scene plays once per result, then the result dialog opens.
+  const resultKey = resultText ? `${snapshot.history.length}:${resultText.title}` : null;
+  const [sceneShownFor, setSceneShownFor] = useState<string | null>(null);
+  const sceneOpen = gameOverOpen && help === null && resultKey !== sceneShownFor;
+  const endScene = useCallback(() => setSceneShownFor(resultKey), [resultKey]);
+
   useEffect(() => {
     if (resultText === null) setDismissedAt(null);
   }, [resultText]);
@@ -93,7 +110,7 @@ export default function App() {
     if (resultText) playSound(resultText.outcome === 'win' ? 'win' : resultText.outcome === 'loss' ? 'loss' : 'draw');
     else if (last.san.endsWith('+')) playSound('check');
     else if (last.captured) playCapture(last.captured);
-    else playSound('move');
+    else playMove();
   }, [snapshot, resultText, prefs.sound, screen]);
 
   const top = opponentOf(player);
@@ -147,6 +164,7 @@ export default function App() {
           onStart={startGame}
           onHelp={() => setHelp('asked')}
           onSettings={() => setSettingsOpen(true)}
+          audio={<AudioToggles prefs={prefs} onChange={setPrefs} showSound={false} />}
         />
         {dialogs}
       </>
@@ -238,6 +256,7 @@ export default function App() {
                 </svg>
                 Undo move
               </Button>
+              <AudioToggles prefs={prefs} onChange={setPrefs} showSound className="order-last ml-auto" />
               {ongoing && (
                 <Button onClick={offerDraw} disabled={!game.canOfferDraw}>
                   <span aria-hidden="true" className="text-base leading-none font-extrabold">½</span>
@@ -266,9 +285,10 @@ export default function App() {
         onCancel={() => setNewGameOpen(false)}
         onStart={startGame}
       />
+      {sceneOpen && resultText && <ResultScene result={resultText} cast={sceneCast(snapshot, resultText, player)} onDone={endScene} />}
       <GameOverDialog
         result={resultText}
-        open={gameOverOpen && help === null}
+        open={gameOverOpen && help === null && !sceneOpen}
         onClose={() => setDismissedAt(snapshot.history.length)}
         onPlayAgain={() => game.newGame()}
       />

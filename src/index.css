@@ -168,6 +168,146 @@ body {
   transition: transform 170ms cubic-bezier(0.3, 0.7, 0.2, 1);
 }
 
+/*
+ * End-of-game scene (ResultScene). Each outcome acts out the game's idea:
+ * a win lifts the shed pieces away, a loss drops the held pieces in a heap,
+ * a draw balances the two kings. Per-piece variation comes from --x, --r,
+ * --s, --delay and --dur set inline.
+ */
+.scene {
+  animation: scene-veil 3s ease-out both;
+}
+.scene-loss {
+  animation:
+    scene-veil 3s ease-out both,
+    scene-jolt 380ms cubic-bezier(0.3, 0, 0.3, 1) 820ms;
+}
+.scene-piece {
+  position: absolute;
+  left: var(--x);
+  width: clamp(2.5rem, 7vw, 4.75rem);
+  height: clamp(2.5rem, 7vw, 4.75rem);
+}
+.scene-rise {
+  bottom: -12%;
+  animation: scene-rise var(--dur) cubic-bezier(0.5, 0, 0.75, 0.45) var(--delay) both;
+}
+.scene-drop {
+  bottom: var(--bottom);
+  animation: scene-drop 760ms cubic-bezier(0.55, 0, 0.9, 0.5) var(--delay) both;
+}
+.scene-title-win {
+  animation: scene-turn-upright 900ms cubic-bezier(0.5, 1.5, 0.45, 1) 250ms both;
+}
+.scene-title-loss {
+  animation: scene-slam 820ms cubic-bezier(0.6, 0, 0.9, 0.55) 150ms both;
+}
+.scene-title-draw {
+  animation: caption 700ms ease-out 200ms both;
+}
+.scene-beam {
+  animation: scene-balance 1900ms cubic-bezier(0.3, 0.6, 0.3, 1) 350ms both;
+  transform-origin: 50% 100%;
+}
+.scene-detail {
+  animation: caption 500ms ease-out 1100ms both;
+}
+
+@keyframes scene-veil {
+  from {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+}
+@keyframes scene-rise {
+  from {
+    transform: translateY(0) rotate(0deg) scale(var(--s));
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-125vh) rotate(var(--r)) scale(var(--s));
+    opacity: 0.2;
+  }
+}
+@keyframes scene-drop {
+  from {
+    transform: translateY(-110vh) rotate(0deg) scale(var(--s));
+  }
+  78% {
+    transform: translateY(0) rotate(var(--r)) scale(var(--s));
+  }
+  88% {
+    transform: translateY(-9%) rotate(var(--r)) scale(var(--s));
+    animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6);
+  }
+  to {
+    transform: translateY(0) rotate(var(--r)) scale(var(--s));
+  }
+}
+@keyframes scene-jolt {
+  25% {
+    transform: translateY(10px);
+  }
+  55% {
+    transform: translateY(-4px);
+  }
+  80% {
+    transform: translateY(2px);
+  }
+}
+/* Arrives upside down, like the "Chess" in the wordmark, and turns the right way up. */
+@keyframes scene-turn-upright {
+  from {
+    transform: rotate(180deg) scale(0.4);
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+}
+/* Falls, squashes on impact, settles. */
+@keyframes scene-slam {
+  from {
+    transform: translateY(-70vh);
+  }
+  70% {
+    transform: translateY(0) scale(1.12, 0.8);
+    animation-timing-function: cubic-bezier(0.3, 0.6, 0.4, 1);
+  }
+  85% {
+    transform: translateY(0) scale(0.96, 1.05);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes scene-balance {
+  from {
+    transform: rotate(-14deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  35% {
+    transform: rotate(9deg);
+  }
+  58% {
+    transform: rotate(-5deg);
+  }
+  78% {
+    transform: rotate(2deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .piece {
     transition: none;
