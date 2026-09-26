@@ -9,6 +9,7 @@
  *   public/icons/apple-touch-icon.png               180px, full bleed
  *   store-assets/store-logo-1080.png                Store 1:1 logo
  *   store-assets/hero-1920x1080.png                 Store 16:9 hero art (no text: the Store overlays the title)
+ *   store-assets/poster-1440x2160.png               Store 2:3 poster art (no text, like the hero)
  */
 import { Resvg } from '@resvg/resvg-js';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -93,6 +94,33 @@ function heroSvg(): string {
 </svg>`;
 }
 
+/** Poster art (2:3): the hero composition stacked, the inverted king above the rising tiles. */
+function posterSvg(): string {
+  const W = 720;
+  const H = 1080;
+  let marks = '';
+  for (let x = 48; x < W; x += 48) {
+    for (let y = 48; y < H; y += 48) marks += `<circle cx="${x}" cy="${y}" r="1.2" fill="${TILE}"/>`;
+  }
+  let tiles = '';
+  for (let i = 0; i < 15; i++) {
+    const t = i / 14;
+    const x = 96 + i * 36;
+    const y = 930 - 330 * t ** 2.2;
+    const opacity = 1 - 0.92 * t ** 1.3;
+    const size = 26 - 7 * t;
+    tiles += `<rect x="${(x + (26 - size) / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${size.toFixed(1)}" height="${size.toFixed(1)}" rx="${(size * 0.22).toFixed(1)}" fill="${i === 0 ? DUSK : LILAC}" fill-opacity="${opacity.toFixed(3)}"/>`;
+  }
+  const rule = `<rect x="96" y="972" width="${14 * 36 + 26}" height="1.5" fill="${TILE}"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">
+  <rect width="${W}" height="${H}" fill="${INK}"/>
+  ${marks}
+  ${rule}
+  ${tiles}
+  <g transform="translate(129.6 70) scale(0.9) rotate(180 256 256)">${king(LILAC, MARIGOLD)}</g>
+</svg>`;
+}
+
 function renderPng(svg: string, width: number, file: string): void {
   const png = new Resvg(svg, { fitTo: { mode: 'width', value: width } }).render().asPng();
   writeFileSync(file, png);
@@ -113,3 +141,4 @@ renderPng(maskable, 512, 'public/icons/icon-maskable-512.png');
 renderPng(maskable, 180, 'public/icons/apple-touch-icon.png');
 renderPng(maskable, 1080, 'store-assets/store-logo-1080.png');
 renderPng(heroSvg(), 1920, 'store-assets/hero-1920x1080.png');
+renderPng(posterSvg(), 1440, 'store-assets/poster-1440x2160.png');
