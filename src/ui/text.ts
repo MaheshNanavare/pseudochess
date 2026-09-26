@@ -11,11 +11,15 @@ export const PIECE_NAMES: Record<PieceType, string> = {
 
 export const COLOR_NAMES: Record<Color, string> = { w: 'White', b: 'Black' };
 
-/** A move in plain words, for screen readers: "Computer: bishop a3 to g4, takes your pawn". */
-export function describeMove(m: Move, player: Color): string {
+/**
+ * A move in plain words, for screen readers: "Computer: bishop a3 to g4, takes your pawn".
+ * `player` is the person's colour against the computer, or null when two people share the device.
+ */
+export function describeMove(m: Move, player: Color | null): string {
   const mine = m.color === player;
-  let text = `${mine ? 'You' : 'Computer'}: ${PIECE_NAMES[m.piece]} ${m.from} to ${m.to}`;
-  if (m.captured) text += `, takes ${mine ? 'a' : 'your'} ${PIECE_NAMES[m.captured]}`;
+  const who = player === null ? COLOR_NAMES[m.color] : mine ? 'You' : 'Computer';
+  let text = `${who}: ${PIECE_NAMES[m.piece]} ${m.from} to ${m.to}`;
+  if (m.captured) text += `, takes ${mine || player === null ? 'a' : 'your'} ${PIECE_NAMES[m.captured]}`;
   if (m.promotion) text += `, promotes to ${PIECE_NAMES[m.promotion]}`;
   if (m.san.endsWith('#')) text += ', checkmate';
   else if (m.san.endsWith('+')) text += ', check';
@@ -28,7 +32,8 @@ export interface ResultText {
   detail: string;
 }
 
-export function describeResult(result: GameResult, player: Color): ResultText | null {
+/** `player` as in describeMove: null for two people, who both see the winner named by colour. */
+export function describeResult(result: GameResult, player: Color | null): ResultText | null {
   if (result.status === 'ongoing') return null;
   if (result.status === 'draw') {
     const detail = {
@@ -38,6 +43,11 @@ export function describeResult(result: GameResult, player: Color): ResultText | 
       'bare-kings': 'Only the two kings are left.',
     }[result.reason];
     return { outcome: 'draw', title: 'Draw', detail };
+  }
+  if (player === null) {
+    const winner = COLOR_NAMES[result.winner];
+    const detail = result.reason === 'checkmated' ? `${winner}'s king was checkmated.` : `${winner} lost every piece except the king.`;
+    return { outcome: 'win', title: `${winner} wins`, detail };
   }
   const playerWon = result.winner === player;
   if (result.reason === 'checkmated') {

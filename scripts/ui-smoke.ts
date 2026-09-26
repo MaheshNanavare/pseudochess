@@ -120,6 +120,43 @@ async function checkInteractions(): Promise<void> {
   await context.close();
 }
 
+/** Two players on one device, and the note that explains a refused move when a capture is forced. */
+async function checkTwoPlayerAndForcedNote(): Promise<void> {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  page.on('pageerror', (err) => errors.push(`[two-player] ${err.message}`));
+  await page.goto(url);
+  await page.waitForLoadState('networkidle');
+  await page.getByText('A friend', { exact: true }).click();
+  await startFromHome(page);
+  const status = async () => (await page.locator('#status').textContent()) ?? '';
+
+  await clickSquare(page, 'e2');
+  await clickSquare(page, 'e4');
+  check((await status()).includes('Black to move'), 'two players: Black moves next, no computer');
+  await clickSquare(page, 'd7');
+  await clickSquare(page, 'd5');
+  check((await status()).includes('White must capture'), 'two players: White must capture');
+
+  const note = page.getByRole('alert');
+  await clickSquare(page, 'g1');
+  check((await note.textContent())?.includes('knight on g1 has to wait') ?? false, 'note when picking a piece that cannot capture');
+  await page.waitForTimeout(400); // let the note finish dropping in
+  await page.screenshot({ path: `${outDir}/two-player-note.png` });
+  await clickSquare(page, 'e4');
+  check(!(await note.isVisible()), 'note clears when the capturing piece is picked');
+  await clickSquare(page, 'e5');
+  check((await note.textContent())?.includes("can't move to e5") ?? false, 'note when putting the capturer on a quiet square');
+  await clickSquare(page, 'd5');
+  check((await historyText(page)).includes('exd5') && !(await note.isVisible()), 'the piece stays in hand, so the capture still plays');
+
+  await page.getByRole('button', { name: 'Undo move' }).click();
+  check(!(await historyText(page)).includes('exd5') && (await historyText(page)).includes('d5'), 'two players: undo takes back one move');
+  await page.getByRole('button', { name: 'Home' }).click();
+  check((await page.getByRole('button', { name: /Continue game/ }).textContent())?.includes('two players') ?? false, 'home offers to continue the two-player game');
+  await context.close();
+}
+
 const browser = await chromium.launch({ headless: true });
 const errors: string[] = [];
 try {
@@ -161,6 +198,7 @@ try {
     await page.close();
   }
   await checkInteractions();
+  await checkTwoPlayerAndForcedNote();
 } finally {
   await browser.close();
 }

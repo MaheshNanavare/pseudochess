@@ -14,9 +14,17 @@ export interface Preferences {
   hints: boolean;
 }
 
-export interface SavedGame {
+/** Who plays the other side: the engine, or a second person on the same device. */
+export type Opponent = 'computer' | 'human';
+
+export interface GameSettings {
+  opponent: Opponent;
+  /** The side at the bottom of the board. Against the computer, the side the person plays. */
   playerColor: Color;
   difficulty: Difficulty;
+}
+
+export interface SavedGame extends GameSettings {
   moves: MoveInput[];
 }
 
@@ -61,7 +69,8 @@ export function loadGame(): SavedGame | null {
   if (!saved || !Array.isArray(saved.moves)) return null;
   if (saved.playerColor !== 'w' && saved.playerColor !== 'b') return null;
   if (!['easy', 'medium', 'hard'].includes(saved.difficulty)) return null;
-  return saved;
+  // Games saved before two-player mode were all against the computer.
+  return { ...saved, opponent: saved.opponent === 'human' ? 'human' : 'computer' };
 }
 
 export function saveGame(game: SavedGame): void {

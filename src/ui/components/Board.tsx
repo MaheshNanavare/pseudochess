@@ -18,8 +18,11 @@ interface BoardProps {
   lastMove: Move | undefined;
   checkSquare: SquareName | undefined;
   interactive: boolean;
+  /** Draws attention to the pieces that must capture (while the forced-capture note shows). */
+  nudging: boolean;
   onSquareClick: (square: SquareName) => void;
-  onDragStart: (square: SquareName) => void;
+  /** Returns false when the piece cannot be picked up; the drag is then dropped. */
+  onDragStart: (square: SquareName) => boolean;
   /** Returns false when the drop square is not a legal move. */
   onDrop: (from: SquareName, to: SquareName) => boolean;
 }
@@ -32,6 +35,8 @@ interface Drag {
   x: number;
   y: number;
   active: boolean;
+  /** The piece could not be picked up: the pointer is followed until release, but nothing moves. */
+  blocked: boolean;
 }
 
 /** Column and row (0..7, top-left origin) of a square for the given orientation. */
@@ -55,7 +60,7 @@ const ARROWS: Record<string, [number, number]> = {
 const DRAG_THRESHOLD_PX = 6;
 
 export function Board(props: BoardProps) {
-  const { pieces, history, orientation, selected, targets, movable, forced, hints, lastMove, checkSquare, interactive } = props;
+  const { pieces, history, orientation, selected, targets, movable, forced, hints, lastMove, checkSquare, interactive, nudging } = props;
   const { onSquareClick, onDragStart, onDrop } = props;
   const bySquare = useMemo(() => new Map(pieces.map((p) => [p.square, p])), [pieces]);
   const targetSet = useMemo(() => new Set(targets.map((m) => m.to)), [targets]);
@@ -81,19 +86,21 @@ export function Board(props: BoardProps) {
   const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (!interactive || e.button !== 0) return;
     const square = (e.target as Element).closest('[data-square]')?.getAttribute('data-square') as SquareName | null;
-    if (!square || !movable.has(square)) return;
+    // Any piece can start a drag, so trying to drag one that may not move can be explained.
+    if (!square || !bySquare.has(square)) return;
     // No pointer capture yet: capturing now would retarget the click of a plain tap.
-    setDrag({ from: square, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, active: false });
+    setDrag({ from: square, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, active: false, blocked: false });
   };
 
   const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!drag || e.pointerId !== drag.pointerId) return;
     const moved = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > DRAG_THRESHOLD_PX;
+    let blocked = drag.blocked;
     if (moved && !drag.active) {
       rootRef.current?.setPointerCapture(e.pointerId);
-      onDragStart(drag.from);
+      blocked = !onDragStart(drag.from);
     }
-    setDrag({ ...drag, x: e.clientX, y: e.clientY, active: drag.active || moved });
+    setDrag({ ...drag, x: e.clientX, y: e.clientY, active: drag.active || moved, blocked });
   };
 
   const handlePointerUp = (e: PointerEvent<HTMLDivElement>) => {
@@ -101,7 +108,7 @@ export function Board(props: BoardProps) {
     if (drag.active) {
       suppressClick.current = true;
       const to = squareFromPoint(e.clientX, e.clientY);
-      if (to && to !== drag.from) onDrop(drag.from, to);
+      if (!drag.blocked && to && to !== drag.from) onDrop(drag.from, to);
     }
     setDrag(null);
   };
@@ -116,7 +123,7 @@ export function Board(props: BoardProps) {
     rootRef.current?.querySelector<HTMLButtonElement>(`[data-square="${next}"]`)?.focus();
   };
 
-  const dragging = drag?.active ? drag : null;
+  const dragging = drag?.active && !drag.blocked ? drag : null;
   const rect = dragging ? rootRef.current?.getBoundingClientRect() : undefined;
   const draggedPiece = dragging ? bySquare.get(dragging.from) : undefined;
 
@@ -133,7 +140,7 @@ export function Board(props: BoardProps) {
           e.stopPropagation();
         }
       }}
-      className={`relative aspect-square w-full touch-none select-none ${dragging ? 'cursor-grabbing' : ''}`}
+      className={`relative aspect-square w-full touch-none select-none ${dragging ? 'cursor-grabbing' : ''} ${drag?.blocked ? 'cursor-not-allowed' : ''}`}
     >
       <div
         role="group"
@@ -197,7 +204,9 @@ export function Board(props: BoardProps) {
           const mustCapture = forced && movable.has(name) && selected !== name;
           return (
             <div key={name} className="relative">
-              {mustCapture && <span className="absolute inset-[3px] rounded-[4px] ring-[3px] ring-must ring-inset" />}
+              {mustCapture && (
+                <span className={`absolute inset-[3px] rounded-[4px] ring-[3px] ring-must ring-inset ${nudging ? 'animate-nudge' : ''}`} />
+              )}
               {target && !occupied && <span className="absolute top-1/2 left-1/2 h-[28%] w-[28%] -translate-1/2 animate-pop rounded-full bg-ink/30" />}
               {target && occupied && (
                 <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full animate-pop">

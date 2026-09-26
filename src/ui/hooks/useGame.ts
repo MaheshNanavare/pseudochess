@@ -12,13 +12,9 @@ import {
   type PromotionPiece,
   type Square,
 } from '../../engine/types';
-import { saveGame } from '../storage';
+import { explainForcedCapture, type Attempt, type ForcedCaptureNote } from '../forcedCapture';
+import { saveGame, type GameSettings } from '../storage';
 import { AICancelledError, useAI } from './useAI';
-
-export interface GameSettings {
-  playerColor: Color;
-  difficulty: Difficulty;
-}
 
 export interface GameSnapshot {
   pieces: Piece[];
@@ -26,21 +22,33 @@ export interface GameSnapshot {
   legal: Move[];
   /** True when the side to move has at least one capture, so it must capture. */
   forced: boolean;
+  /** Legal moves under normal chess rules; only differs from `legal` when a capture is forced. */
+  normal: Move[];
   result: GameResult;
   history: Move[];
   inCheck: boolean;
   kingSquare: Square | undefined;
 }
 
+/** A forced-capture explanation on screen; the id restarts its animation when it is shown again. */
+export interface Nudge {
+  id: number;
+  note: ForcedCaptureNote;
+  /** The square the player tapped or dropped on, so the note can stay clear of it. */
+  square: Square;
+}
+
 function takeSnapshot(board: Board): GameSnapshot {
   const legal = legalMoves(board);
   const turn = board.sideToMove();
   const pieces = board.pieces();
+  const forced = legal.length > 0 && legal[0]!.captured !== undefined;
   return {
     pieces,
     turn,
     legal,
-    forced: legal.length > 0 && legal[0]!.captured !== undefined,
+    forced,
+    normal: forced ? board.allLegalMoves() : legal,
     result: getGameResult(board),
     history: board.history(),
     inCheck: board.inCheck(),
@@ -72,13 +80,15 @@ export function useGame(initial: GameSettings, savedMoves: MoveInput[] = []) {
   const [settings, setSettings] = useState<GameSettings>(initial);
   const [selected, setSelected] = useState<Square | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: Square; to: Square } | null>(null);
+  const [nudge, setNudge] = useState<Nudge | null>(null);
   const { thinking, requestMove, cancel } = useAI();
 
   // `version` is the change signal for the mutable board in boardRef.
   const snapshot = useMemo(() => takeSnapshot(boardRef.current), [version]);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
-  const isPlayerTurn = snapshot.result.status === 'ongoing' && snapshot.turn === settings.playerColor;
+  const twoPlayer = settings.opponent === 'human';
+  const isPlayerTurn = snapshot.result.status === 'ongoing' && (twoPlayer || snapshot.turn === settings.playerColor);
 
   // Remember the game so closing the app does not lose it.
   useEffect(() => {
@@ -87,7 +97,7 @@ export function useGame(initial: GameSettings, savedMoves: MoveInput[] = []) {
 
   // AI reply whenever it is the AI's turn.
   useEffect(() => {
-    if (snapshot.result.status !== 'ongoing' || snapshot.turn === settings.playerColor) return;
+    if (twoPlayer || snapshot.result.status !== 'ongoing' || snapshot.turn === settings.playerColor) return;
     let active = true;
     Promise.all([requestMove(START_FEN, snapshot.history.map(toInput), settings.difficulty), wait(MIN_THINK_MS)])
       .then(([reply]) => {
@@ -102,13 +112,26 @@ export function useGame(initial: GameSettings, savedMoves: MoveInput[] = []) {
       active = false;
       cancel();
     };
-  }, [snapshot, settings, requestMove, cancel, bump]);
+  }, [twoPlayer, snapshot, settings, requestMove, cancel, bump]);
+
+  /** Shows why an attempt is refused, if the forced-capture rule is the reason. */
+  const explain = useCallback(
+    (attempt: Attempt): boolean => {
+      const note = explainForcedCapture(attempt, snapshot.legal, snapshot.normal, snapshot.pieces);
+      if (note) setNudge((prev) => ({ id: (prev?.id ?? 0) + 1, note, square: attempt.to ?? attempt.from }));
+      return note !== null;
+    },
+    [snapshot],
+  );
+
+  const dismissNudge = useCallback(() => setNudge(null), []);
 
   const play = useCallback(
     (move: MoveInput) => {
       boardRef.current.make(move);
       setSelected(null);
       setPendingPromotion(null);
+      setNudge(null);
       bump();
     },
     [bump],
@@ -133,10 +156,19 @@ export function useGame(initial: GameSettings, savedMoves: MoveInput[] = []) {
         else play(toInput(matches[0]!));
         return;
       }
-      if (movable.has(square) && square !== selected) setSelected(square);
-      else setSelected(null);
+      if (movable.has(square) && square !== selected) {
+        setSelected(square);
+        setNudge(null);
+        return;
+      }
+      // Tapping one of your own pieces is a pick-up; anything else puts the selected piece down.
+      const own = snapshot.pieces.some((p) => p.square === square && p.color === snapshot.turn);
+      const putDown = selected !== null && !own;
+      const explained = explain(putDown ? { from: selected, to: square } : { from: square });
+      // A refused put-down keeps the piece in hand, so the right capture is one tap away.
+      if (!(explained && putDown)) setSelected(null);
     },
-    [isPlayerTurn, pendingPromotion, targets, selected, movable, play],
+    [isPlayerTurn, pendingPromotion, targets, selected, movable, snapshot, explain, play],
   );
 
   /** Move by drag and drop. Returns false when the drop square is not a legal target. */
@@ -144,7 +176,10 @@ export function useGame(initial: GameSettings, savedMoves: MoveInput[] = []) {
     (from: Square, to: Square): boolean => {
       if (!isPlayerTurn || pendingPromotion) return false;
       const matches = snapshot.legal.filter((m) => m.from === from && m.to === to);
-      if (matches.length === 0) return false;
+      if (matches.length === 0) {
+        explain({ from, to });
+        return false;
+      }
       if (matches.length > 1) {
         setSelected(from);
         setPendingPromotion({ from, to });
@@ -153,15 +188,22 @@ export function useGame(initial: GameSettings, savedMoves: MoveInput[] = []) {
       }
       return true;
     },
-    [isPlayerTurn, pendingPromotion, snapshot, play],
+    [isPlayerTurn, pendingPromotion, snapshot, explain, play],
   );
 
-  /** Select a piece that can move (used when a drag starts). */
+  /** Picks up a piece when a drag starts. Returns false when that piece cannot move. */
   const select = useCallback(
-    (square: Square) => {
-      if (isPlayerTurn && !pendingPromotion && movable.has(square)) setSelected(square);
+    (square: Square): boolean => {
+      if (!isPlayerTurn || pendingPromotion) return false;
+      if (!movable.has(square)) {
+        explain({ from: square });
+        return false;
+      }
+      setSelected(square);
+      setNudge(null);
+      return true;
     },
-    [isPlayerTurn, pendingPromotion, movable],
+    [isPlayerTurn, pendingPromotion, movable, explain],
   );
 
   const choosePromotion = useCallback(
@@ -179,6 +221,7 @@ export function useGame(initial: GameSettings, savedMoves: MoveInput[] = []) {
       setSettings((s) => ({ ...s, ...next }));
       setSelected(null);
       setPendingPromotion(null);
+      setNudge(null);
       bump();
     },
     [cancel, bump],
@@ -188,26 +231,31 @@ export function useGame(initial: GameSettings, savedMoves: MoveInput[] = []) {
     setSettings((s) => ({ ...s, difficulty }));
   }, []);
 
-  const canUndo = snapshot.history.some((m) => m.color === settings.playerColor);
+  const canUndo = twoPlayer ? snapshot.history.length > 0 : snapshot.history.some((m) => m.color === settings.playerColor);
 
-  /** Take back the player's last move (and the AI reply after it, if any). */
+  /** Take back the last move. Against the computer: the player's last move and the reply after it. */
   const undo = useCallback(() => {
     if (!canUndo) return;
     cancel();
     const board = boardRef.current;
-    for (let m = board.undo(); m; m = board.undo()) {
-      if (m.color === settings.playerColor) break;
+    if (twoPlayer) board.undo();
+    else {
+      for (let m = board.undo(); m; m = board.undo()) {
+        if (m.color === settings.playerColor) break;
+      }
     }
     setSelected(null);
     setPendingPromotion(null);
+    setNudge(null);
     bump();
-  }, [canUndo, cancel, settings.playerColor, bump]);
+  }, [canUndo, cancel, twoPlayer, settings.playerColor, bump]);
 
   const lastMove = snapshot.history.at(-1);
 
   return {
     snapshot,
     settings,
+    twoPlayer,
     selected,
     targets,
     movable,
@@ -216,6 +264,8 @@ export function useGame(initial: GameSettings, savedMoves: MoveInput[] = []) {
     isPlayerTurn,
     pendingPromotion,
     canUndo,
+    nudge,
+    dismissNudge,
     onSquareClick,
     tryMove,
     select,

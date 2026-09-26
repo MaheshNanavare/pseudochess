@@ -1,35 +1,35 @@
 import { useEffect, useState } from 'react';
-import type { Color, Difficulty } from '../../engine/types';
+import type { GameSettings } from '../storage';
 import { COLOR_NAMES } from '../text';
 import { Button } from './Button';
-import { DifficultySelect } from './DifficultySelect';
+import { draftFrom, GameSetupFields, resolveSetup, type SetupDraft } from './GameSetup';
 import { LandingBoard } from './LandingBoard';
-import { resolveSide, SideSelect, type Side } from './SideSelect';
 import { Wordmark } from './Wordmark';
 
 /** The landing animation plays once per launch; coming back to Home shows its final frame. */
 let landingPlayed = false;
 
-export interface GameInProgress {
+export interface GameInProgress extends GameSettings {
   moveNumber: number;
-  playerColor: Color;
-  difficulty: Difficulty;
 }
 
 interface HomeProps {
   inProgress: GameInProgress | null;
-  initialColor: Color;
-  initialDifficulty: Difficulty;
+  initial: GameSettings;
   onContinue: () => void;
-  onStart: (color: Color, difficulty: Difficulty) => void;
+  onStart: (settings: GameSettings) => void;
   onHelp: () => void;
   onSettings: () => void;
 }
 
+function describeInProgress(game: GameInProgress): string {
+  if (game.opponent === 'human') return `Move ${game.moveNumber}, two players on this device`;
+  return `Move ${game.moveNumber}, you are ${COLOR_NAMES[game.playerColor]}, computer on ${game.difficulty}`;
+}
+
 /** The screen the app opens on: what the game is, a way back into a saved game, and a new game. */
-export function Home({ inProgress, initialColor, initialDifficulty, onContinue, onStart, onHelp, onSettings }: HomeProps) {
-  const [side, setSide] = useState<Side>(initialColor);
-  const [difficulty, setDifficulty] = useState<Difficulty>(initialDifficulty);
+export function Home({ inProgress, initial, onContinue, onStart, onHelp, onSettings }: HomeProps) {
+  const [draft, setDraft] = useState<SetupDraft>(() => draftFrom(initial));
   const [animate] = useState(() => !landingPlayed);
 
   useEffect(() => {
@@ -55,9 +55,7 @@ export function Home({ inProgress, initialColor, initialDifficulty, onContinue, 
         {inProgress && (
           <Button variant="primary" onClick={onContinue} className="h-auto w-full flex-col gap-0.5 py-3">
             Continue game
-            <span className="text-sm font-normal opacity-75">
-              Move {inProgress.moveNumber}, you are {COLOR_NAMES[inProgress.playerColor]}, computer on {inProgress.difficulty}
-            </span>
+            <span className="text-sm font-normal opacity-75">{describeInProgress(inProgress)}</span>
           </Button>
         )}
 
@@ -65,11 +63,10 @@ export function Home({ inProgress, initialColor, initialDifficulty, onContinue, 
           <h2 id="home-new-game" className="text-xl font-extrabold [font-stretch:85%]">
             New game
           </h2>
-          <div className="mt-4 space-y-5">
-            <SideSelect value={side} onChange={setSide} />
-            <DifficultySelect value={difficulty} onChange={setDifficulty} />
+          <div className="mt-4">
+            <GameSetupFields value={draft} onChange={setDraft} />
           </div>
-          <Button variant={inProgress ? 'quiet' : 'primary'} onClick={() => onStart(resolveSide(side), difficulty)} className="mt-1 w-full">
+          <Button variant={inProgress ? 'quiet' : 'primary'} onClick={() => onStart(resolveSetup(draft))} className={`w-full ${draft.opponent === 'computer' ? 'mt-1' : 'mt-5'}`}>
             Start new game
           </Button>
         </section>

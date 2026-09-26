@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { opponentOf, type Color, type Difficulty } from './engine/types';
+import { opponentOf, type Color } from './engine/types';
 import { Board } from './ui/components/Board';
 import { Button } from './ui/components/Button';
+import { CaptureNote } from './ui/components/CaptureNote';
 import { GameOverDialog } from './ui/components/GameOverDialog';
 import { Home, type GameInProgress } from './ui/components/Home';
 import { HowToPlay } from './ui/components/HowToPlay';
@@ -14,8 +15,8 @@ import { StatusLine } from './ui/components/StatusLine';
 import { Wordmark } from './ui/components/Wordmark';
 import { useGame } from './ui/hooks/useGame';
 import { playSound } from './ui/sound';
-import { loadGame, loadPreferences, savePreferences, type Preferences } from './ui/storage';
-import { describeMove, describeResult } from './ui/text';
+import { loadGame, loadPreferences, savePreferences, type GameSettings, type Preferences } from './ui/storage';
+import { COLOR_NAMES, describeMove, describeResult } from './ui/text';
 
 const HELP_SEEN_KEY = 'pseudochess.helpSeen';
 
@@ -41,7 +42,14 @@ function writeHelpSeen(): void {
 
 export default function App() {
   const [saved] = useState(loadGame);
-  const game = useGame({ playerColor: saved?.playerColor ?? 'w', difficulty: saved?.difficulty ?? 'medium' }, saved?.moves);
+  const game = useGame(
+    {
+      opponent: saved?.opponent ?? 'computer',
+      playerColor: saved?.playerColor ?? 'w',
+      difficulty: saved?.difficulty ?? 'medium',
+    },
+    saved?.moves,
+  );
   const { snapshot, settings } = game;
   const [screen, setScreen] = useState<Screen>('home');
   const [help, setHelp] = useState<HelpMode | null>(null);
@@ -50,7 +58,10 @@ export default function App() {
   const [prefs, setPrefs] = useState<Preferences>(loadPreferences);
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
 
-  const resultText = describeResult(snapshot.result, settings.playerColor);
+  const player = settings.playerColor;
+  // Two people on one device are both "you", so they are named by colour instead.
+  const perspective = game.twoPlayer ? null : player;
+  const resultText = describeResult(snapshot.result, perspective);
   const gameOverOpen = resultText !== null && dismissedAt !== snapshot.history.length;
 
   useEffect(() => {
@@ -76,14 +87,12 @@ export default function App() {
     else playSound(last.captured ? 'capture' : 'move');
   }, [snapshot, resultText, prefs.sound, screen]);
 
-  const player = settings.playerColor;
-  const ai = opponentOf(player);
-  const aiToMove = snapshot.result.status === 'ongoing' && snapshot.turn === ai;
+  const top = opponentOf(player);
+  const ongoing = snapshot.result.status === 'ongoing';
+  const toMove = (color: Color) => ongoing && snapshot.turn === color;
 
   const inProgress: GameInProgress | null =
-    snapshot.history.length > 0 && snapshot.result.status === 'ongoing'
-      ? { moveNumber: Math.floor(snapshot.history.length / 2) + 1, playerColor: player, difficulty: settings.difficulty }
-      : null;
+    snapshot.history.length > 0 && ongoing ? { ...settings, moveNumber: Math.floor(snapshot.history.length / 2) + 1 } : null;
 
   const closeHelp = () => {
     writeHelpSeen();
@@ -96,9 +105,9 @@ export default function App() {
     if (!readHelpSeen()) setHelp('intro');
   };
 
-  const startGame = (playerColor: Color, difficulty: Difficulty) => {
+  const startGame = (next: GameSettings) => {
     setNewGameOpen(false);
-    game.newGame({ playerColor, difficulty });
+    game.newGame(next);
     enterGame();
   };
 
@@ -114,8 +123,7 @@ export default function App() {
       <>
         <Home
           inProgress={inProgress}
-          initialColor={player}
-          initialDifficulty={settings.difficulty}
+          initial={settings}
           onContinue={enterGame}
           onStart={startGame}
           onHelp={() => setHelp('asked')}
@@ -156,42 +164,52 @@ export default function App() {
       <main className="mx-auto grid max-w-7xl gap-x-10 px-4 pb-8 sm:px-6 lg:grid-cols-[auto_minmax(16rem,21rem)] lg:justify-center">
         <section aria-label="Game" className="mx-auto w-full max-w-[36rem] lg:w-[min(40rem,calc(100dvh-14rem))] lg:max-w-none xl:w-[min(54rem,calc(100dvh-14rem))]">
           <PlayerStrip
-            name="Computer"
-            detail={settings.difficulty[0]!.toUpperCase() + settings.difficulty.slice(1)}
-            color={ai}
-            pieces={snapshot.pieces.filter((p) => p.color === ai)}
-            toMove={aiToMove}
-            thinking={aiToMove}
+            name={game.twoPlayer ? COLOR_NAMES[top] : 'Computer'}
+            detail={game.twoPlayer ? undefined : settings.difficulty[0]!.toUpperCase() + settings.difficulty.slice(1)}
+            color={top}
+            pieces={snapshot.pieces.filter((p) => p.color === top)}
+            toMove={toMove(top)}
+            thinking={!game.twoPlayer && toMove(top)}
           />
-          <Board
-            pieces={snapshot.pieces}
-            history={snapshot.history}
-            orientation={player}
-            selected={game.selected}
-            targets={game.targets}
-            movable={game.movable}
-            forced={snapshot.forced}
-            hints={prefs.hints}
-            lastMove={game.lastMove}
-            checkSquare={snapshot.inCheck ? snapshot.kingSquare : undefined}
-            interactive={game.isPlayerTurn}
-            onSquareClick={game.onSquareClick}
-            onDragStart={game.select}
-            onDrop={game.tryMove}
-          />
+          <div className="relative">
+            <Board
+              pieces={snapshot.pieces}
+              history={snapshot.history}
+              orientation={player}
+              selected={game.selected}
+              targets={game.targets}
+              movable={game.movable}
+              forced={snapshot.forced}
+              hints={prefs.hints}
+              lastMove={game.lastMove}
+              checkSquare={snapshot.inCheck ? snapshot.kingSquare : undefined}
+              interactive={game.isPlayerTurn}
+              nudging={game.nudge !== null}
+              onSquareClick={game.onSquareClick}
+              onDragStart={game.select}
+              onDrop={game.tryMove}
+            />
+            <CaptureNote nudge={game.nudge} orientation={player} onDismiss={game.dismissNudge} />
+          </div>
           <PlayerStrip
-            name="You"
+            name={game.twoPlayer ? COLOR_NAMES[player] : 'You'}
             color={player}
             pieces={snapshot.pieces.filter((p) => p.color === player)}
-            toMove={game.isPlayerTurn}
+            toMove={toMove(player)}
           />
         </section>
 
         <aside className="mx-auto w-full max-w-[36rem] lg:relative lg:max-w-none">
           <div className="flex flex-col gap-5 pt-2 lg:absolute lg:inset-0 lg:pt-16 lg:pb-14">
-            <StatusLine result={resultText} isPlayerTurn={game.isPlayerTurn} forced={snapshot.forced} inCheck={snapshot.inCheck} />
+            <StatusLine
+              result={resultText}
+              waiting={!game.isPlayerTurn}
+              mover={game.twoPlayer ? COLOR_NAMES[snapshot.turn] : null}
+              forced={snapshot.forced}
+              inCheck={snapshot.inCheck}
+            />
             <p aria-live="polite" className="sr-only">
-              {game.lastMove ? describeMove(game.lastMove, player) : ''}
+              {game.lastMove ? describeMove(game.lastMove, perspective) : ''}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button onClick={game.undo} disabled={!game.canUndo}>
@@ -214,12 +232,11 @@ export default function App() {
         </aside>
       </main>
 
-      <PromotionPicker open={game.pendingPromotion !== null} color={player} onChoose={game.choosePromotion} />
+      <PromotionPicker open={game.pendingPromotion !== null} color={snapshot.turn} onChoose={game.choosePromotion} />
       <NewGameDialog
         key={newGameOpen ? 'open' : 'closed'}
         open={newGameOpen}
-        initialColor={player}
-        initialDifficulty={settings.difficulty}
+        initial={settings}
         onCancel={() => setNewGameOpen(false)}
         onStart={startGame}
       />
