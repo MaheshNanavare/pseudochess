@@ -193,9 +193,10 @@ body {
   width: clamp(2.5rem, 7vw, 4.75rem);
   height: clamp(2.5rem, 7vw, 4.75rem);
 }
+/* Keeps going behind the result dialog: a steady stream of weight lifting away. */
 .scene-rise {
   bottom: -12%;
-  animation: scene-rise var(--dur) cubic-bezier(0.5, 0, 0.75, 0.45) var(--delay) both;
+  animation: scene-rise var(--dur) cubic-bezier(0.5, 0, 0.75, 0.45) var(--delay) infinite both;
 }
 .scene-drop {
   bottom: var(--bottom);

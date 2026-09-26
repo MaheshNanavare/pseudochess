@@ -10,22 +10,21 @@ interface GameOverDialogProps {
   onHome: () => void;
 }
 
-const TONE = {
-  win: 'text-jade',
-  loss: 'text-rose',
-  draw: 'text-muted',
-} as const;
-
+/**
+ * What to do next, shown low over the end-of-game scene. The scene already
+ * shows the result in large type, so here it is only read out to screen
+ * readers (the scene itself is hidden from them).
+ */
 export function GameOverDialog({ result, open, onClose, onPlayAgain, onHome }: GameOverDialogProps) {
   return (
-    <Modal open={open && result !== null} onClose={onClose} labelledBy="game-over-title">
+    <Modal open={open && result !== null} onClose={onClose} labelledBy="game-over-title" overScene>
       {result && (
         <>
-          <h2 id="game-over-title" className={`text-5xl font-extrabold tracking-tight [font-stretch:75%] ${TONE[result.outcome]}`}>
+          <h2 id="game-over-title" className="sr-only">
             {result.title}
           </h2>
-          <p className="mt-3 text-lg leading-snug">{result.detail}</p>
-          <div className="mt-7 flex flex-wrap justify-end gap-2">
+          <p className="sr-only">{result.detail}</p>
+          <div className="flex flex-wrap justify-center gap-2">
             <Button variant="ghost" onClick={onClose}>
               See the board
             </Button>

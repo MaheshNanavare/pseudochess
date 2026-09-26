@@ -3,7 +3,7 @@ import type { Color, PieceType } from '../../engine/types';
 import type { ResultText } from '../text';
 import { pieceSrc } from './Piece';
 
-/** How long the scene plays before the result dialog, unless tapped away. */
+/** How long the scene plays on its own before the result dialog opens over it, unless tapped. */
 const SCENE_MS = 3000;
 
 export interface SceneCast {
@@ -16,7 +16,9 @@ export interface SceneCast {
 interface ResultSceneProps {
   result: ResultText;
   cast: SceneCast;
-  onDone: () => void;
+  /** The result dialog is open over the scene: the title makes room for it. */
+  revealed: boolean;
+  onReveal: () => void;
 }
 
 const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -31,36 +33,30 @@ const TONE = {
 } as const;
 
 /**
- * The end of a game, acted out before the result dialog. A win lifts the
- * shed pieces away; a loss drops the pieces still held into a heap; a draw
- * balances the two kings on a beam. Tap, click or any key skips it; with
- * reduced motion it is skipped entirely.
+ * The end of a game, acted out behind the result dialog. A win keeps lifting
+ * the shed pieces away; a loss drops the pieces still held into a heap; a draw
+ * balances the two kings on a beam. The dialog opens over it after a few
+ * seconds, or at once on a tap or key; with reduced motion the scene shows
+ * its final frame and the dialog opens straight away.
  */
-export function ResultScene({ result, cast, onDone }: ResultSceneProps) {
-  const skip = reducedMotion();
-
+export function ResultScene({ result, cast, revealed, onReveal }: ResultSceneProps) {
   useEffect(() => {
-    if (skip) {
-      onDone();
-      return;
-    }
-    const timer = setTimeout(onDone, SCENE_MS);
-    const onKey = () => onDone();
-    window.addEventListener('keydown', onKey);
+    if (revealed) return;
+    const timer = setTimeout(onReveal, reducedMotion() ? 0 : SCENE_MS);
+    window.addEventListener('keydown', onReveal);
     return () => {
       clearTimeout(timer);
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onReveal);
     };
-  }, [skip, onDone]);
+  }, [revealed, onReveal]);
 
-  if (skip) return null;
   const tone = TONE[result.outcome];
 
   return (
     <div
       aria-hidden="true"
-      onClick={onDone}
-      className={`fixed inset-0 z-50 cursor-pointer overflow-hidden bg-page/85 backdrop-blur-[3px] ${result.outcome === 'loss' ? 'scene-loss' : 'scene'}`}
+      onClick={revealed ? undefined : onReveal}
+      className={`fixed inset-0 z-50 overflow-hidden bg-page/85 backdrop-blur-[3px] ${revealed ? '' : 'cursor-pointer'} ${result.outcome === 'loss' ? 'scene-loss' : 'scene'}`}
     >
       <div className={`absolute inset-0 bg-linear-to-t ${tone.wash} to-transparent ${result.outcome === 'loss' ? 'rotate-180' : ''}`} />
 
@@ -103,7 +99,9 @@ export function ResultScene({ result, cast, onDone }: ResultSceneProps) {
           />
         ))}
 
-      <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+      <div
+        className={`absolute inset-0 flex flex-col items-center justify-center px-6 text-center transition-transform duration-500 ease-out ${revealed ? '-translate-y-[16dvh]' : ''}`}
+      >
         <p
           className={`text-[clamp(4rem,17vw,11rem)] leading-[0.85] font-extrabold tracking-tight [font-stretch:75%] ${tone.title}`}
         >

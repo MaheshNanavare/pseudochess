@@ -232,7 +232,7 @@ async function checkDrawsAutoMoveAndMusic(): Promise<void> {
 
   await page.getByRole('button', { name: 'Offer draw' }).click();
   await page.getByRole('dialog', { name: 'White offers a draw' }).getByRole('button', { name: 'Accept draw' }).click();
-  // The end scene plays first (about 3 s), then the result dialog opens.
+  // The end scene plays on its own (about 3 s), then the result dialog opens over it.
   await page.getByRole('heading', { name: 'Draw' }).waitFor({ timeout: 6000 });
   check(true, 'two players: an accepted offer ends the game in a draw, after the end scene');
   await page.getByRole('dialog').getByRole('button', { name: 'Home', exact: true }).click();

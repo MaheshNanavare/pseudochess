@@ -86,11 +86,13 @@ export default function App() {
   const resultText = describeResult(snapshot.result, perspective);
   const gameOverOpen = resultText !== null && dismissedAt !== snapshot.history.length;
 
-  // The end-of-game scene plays once per result, then the result dialog opens.
+  // The end-of-game scene plays on its own for a moment, then the result dialog opens over it;
+  // both close together.
   const resultKey = resultText ? `${snapshot.history.length}:${resultText.title}` : null;
-  const [sceneShownFor, setSceneShownFor] = useState<string | null>(null);
-  const sceneOpen = gameOverOpen && help === null && resultKey !== sceneShownFor;
-  const endScene = useCallback(() => setSceneShownFor(resultKey), [resultKey]);
+  const [revealedFor, setRevealedFor] = useState<string | null>(null);
+  const sceneOpen = gameOverOpen && help === null;
+  const revealed = resultKey === revealedFor;
+  const reveal = useCallback(() => setRevealedFor(resultKey), [resultKey]);
 
   useEffect(() => {
     if (resultText === null) setDismissedAt(null);
@@ -345,10 +347,12 @@ export default function App() {
         onCancel={() => setNewGameOpen(false)}
         onStart={startGame}
       />
-      {sceneOpen && resultText && <ResultScene result={resultText} cast={sceneCast(snapshot, resultText, player)} onDone={endScene} />}
+      {sceneOpen && resultText && (
+        <ResultScene result={resultText} cast={sceneCast(snapshot, resultText, player)} revealed={revealed} onReveal={reveal} />
+      )}
       <GameOverDialog
         result={resultText}
-        open={gameOverOpen && help === null && !sceneOpen}
+        open={sceneOpen && revealed}
         onClose={() => setDismissedAt(snapshot.history.length)}
         onPlayAgain={() => game.newGame()}
         onHome={homeFromResult}
