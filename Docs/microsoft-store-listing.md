@@ -32,7 +32,9 @@ Everything needed to submit the PWA to the Microsoft Store with PWABuilder (buil
 
 **Search terms** (max 7): reverse chess, antichess, losing chess, chess variant, board game, chess puzzle, forced capture
 
-**Category:** Games > Board
+**Category:** Games > Card & board, genre Strategy (as published)
+
+**Published as:** PseudoChess, by Originals
 
 **Privacy policy URL:** `https://pseudochess.maheshnanavare.co.uk/privacy.html` (the page ships with the app in `public/privacy.html`)
 
